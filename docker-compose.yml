@@ -1,0 +1,122 @@
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: courseris-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-courseris}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-courseris123}
+      POSTGRES_DB: ${POSTGRES_DB:-courseris}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-courseris}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - courseris-network
+
+  # Auth Service
+  auth_service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: auth-service
+    container_name: courseris-auth-service
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-courseris}:${POSTGRES_PASSWORD:-courseris123}@db:5432/${POSTGRES_DB:-courseris}
+      JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRATION_MINUTES: 30
+    ports:
+      - "8001:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - courseris-network
+    volumes:
+      - ./backend/auth-service:/app
+      - ./backend/shared:/app/shared
+
+  # Course Service
+  course_service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: course-service
+    container_name: courseris-course-service
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-courseris}:${POSTGRES_PASSWORD:-courseris123}@db:5432/${POSTGRES_DB:-courseris}
+      AUTH_SERVICE_URL: http://auth_service:8000
+    ports:
+      - "8002:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      auth_service:
+        condition: service_started
+    networks:
+      - courseris-network
+    volumes:
+      - ./backend/course-service:/app
+      - ./backend/shared:/app/shared
+
+  # Learning Service
+  learning_service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: learning-service
+    container_name: courseris-learning-service
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-courseris}:${POSTGRES_PASSWORD:-courseris123}@db:5432/${POSTGRES_DB:-courseris}
+      AUTH_SERVICE_URL: http://auth_service:8000
+      COURSE_SERVICE_URL: http://course_service:8000
+    ports:
+      - "8003:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      auth_service:
+        condition: service_started
+      course_service:
+        condition: service_started
+    networks:
+      - courseris-network
+    volumes:
+      - ./backend/learning-service:/app
+      - ./backend/shared:/app/shared
+
+  # Frontend Service
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: courseris-frontend
+    environment:
+      VITE_AUTH_SERVICE_URL: http://localhost:8001
+      VITE_COURSE_SERVICE_URL: http://localhost:8002
+      VITE_LEARNING_SERVICE_URL: http://localhost:8003
+    ports:
+      - "3000:3000"
+    depends_on:
+      - auth_service
+      - course_service
+      - learning_service
+    networks:
+      - courseris-network
+    volumes:
+      - .:/app
+      - /app/node_modules
+
+networks:
+  courseris-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+
