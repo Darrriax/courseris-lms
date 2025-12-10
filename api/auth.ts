@@ -24,10 +24,26 @@ export interface UserResponse {
   email: string;
   first_name: string;
   last_name: string;
+  middle_name?: string;
   age?: number;
+  phone_number?: string;
+  country?: string;
+  bio?: string;
   role: 'student' | 'teacher';
   avatar?: string;
+  avatar_url?: string;
+  banner_url?: string;
   name?: string;
+}
+
+export interface UserUpdateData {
+  first_name?: string;
+  last_name?: string;
+  middle_name?: string;
+  age?: number;
+  phone_number?: string;
+  country?: string;
+  bio?: string;
 }
 
 export const authService = {
@@ -50,7 +66,34 @@ export const authService = {
   },
 
   async getCurrentUser(): Promise<UserResponse> {
-    const response = await authApi.get<UserResponse>('/auth/me');
+    const response = await authApi.get<UserResponse>('/users/me');
+    return response.data;
+  },
+
+  async updateProfile(userData: UserUpdateData): Promise<UserResponse> {
+    const response = await authApi.put<UserResponse>('/users/me', userData);
+    return response.data;
+  },
+
+  async uploadAvatar(file: File): Promise<{ avatar_url: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await authApi.post<{ avatar_url: string }>('/users/me/avatar', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  async uploadBanner(file: File): Promise<{ banner_url: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await authApi.post<{ banner_url: string }>('/users/me/banner', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
     return response.data;
   },
 };

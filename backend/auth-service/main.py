@@ -1,24 +1,34 @@
 """
 Auth Service - FastAPI application
 """
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import bcrypt
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 import os
+import shutil
 from typing import Optional
+from pathlib import Path
 
 from database import get_session, init_db
 from models import User
 import sys
 sys.path.append('/app/shared')
-from shared.models import UserCreate, UserResponse, Token, TokenData
+from shared.models import UserCreate, UserResponse, UserUpdate, Token, TokenData
 
 app = FastAPI(title="Auth Service", version="1.0.0")
+
+# Create uploads directory if it doesn't exist
+UPLOAD_DIR = Path("/app/uploads")
+UPLOAD_DIR.mkdir(exist_ok=True)
+
+# Mount static files for serving uploaded images
+app.mount("/static", StaticFiles(directory=str(UPLOAD_DIR)), name="static")
 
 # CORS middleware
 app.add_middleware(
@@ -174,16 +184,149 @@ async def login(
 
 
 @app.get("/auth/me", response_model=UserResponse)
+@app.get("/users/me", response_model=UserResponse)
 async def get_current_user_info(current_user: User = Depends(get_current_user)):
     """Get current user information"""
+    base_url = os.getenv("AUTH_SERVICE_BASE_URL", "http://localhost:8001")
+    
+    # Convert relative URLs to full URLs
+    avatar_url = None
+    if current_user.avatar_url:
+        avatar_url = f"{base_url}{current_user.avatar_url}" if current_user.avatar_url.startswith("/") else current_user.avatar_url
+    
+    banner_url = None
+    if current_user.banner_url:
+        banner_url = f"{base_url}{current_user.banner_url}" if current_user.banner_url.startswith("/") else current_user.banner_url
+    
     return UserResponse(
         id=current_user.id,
         email=current_user.email,
         first_name=current_user.first_name,
         last_name=current_user.last_name,
+        middle_name=current_user.middle_name,
         age=current_user.age,
+        phone_number=current_user.phone_number,
+        country=current_user.country,
+        bio=current_user.bio,
         role=current_user.role,
         avatar=current_user.avatar,
+        avatar_url=avatar_url,
+        banner_url=banner_url,
         name=current_user.name
     )
+
+
+@app.put("/users/me", response_model=UserResponse)
+async def update_user_profile(
+    user_update: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Update current user profile"""
+    # Update only provided fields
+    if user_update.first_name is not None:
+        current_user.first_name = user_update.first_name
+    if user_update.last_name is not None:
+        current_user.last_name = user_update.last_name
+    if user_update.middle_name is not None:
+        current_user.middle_name = user_update.middle_name
+    if user_update.age is not None:
+        current_user.age = user_update.age
+    if user_update.phone_number is not None:
+        current_user.phone_number = user_update.phone_number
+    if user_update.country is not None:
+        current_user.country = user_update.country
+    if user_update.bio is not None:
+        current_user.bio = user_update.bio
+    
+    session.add(current_user)
+    await session.commit()
+    await session.refresh(current_user)
+    
+    return UserResponse(
+        id=current_user.id,
+        email=current_user.email,
+        first_name=current_user.first_name,
+        last_name=current_user.last_name,
+        middle_name=current_user.middle_name,
+        age=current_user.age,
+        phone_number=current_user.phone_number,
+        country=current_user.country,
+        bio=current_user.bio,
+        role=current_user.role,
+        avatar=current_user.avatar,
+        avatar_url=current_user.avatar_url,
+        banner_url=current_user.banner_url,
+        name=current_user.name
+    )
+
+
+@app.post("/users/me/avatar")
+async def upload_avatar(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Upload avatar image"""
+    # Validate file type
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File must be an image"
+        )
+    
+    # Generate unique filename
+    file_extension = Path(file.filename).suffix if file.filename else ".jpg"
+    filename = f"avatar_{current_user.id}{file_extension}"
+    file_path = UPLOAD_DIR / filename
+    
+    # Save file
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    # Update user's avatar_url (store relative path, frontend will construct full URL)
+    avatar_url = f"/static/{filename}"
+    current_user.avatar_url = avatar_url
+    
+    session.add(current_user)
+    await session.commit()
+    
+    # Return full URL for frontend
+    base_url = os.getenv("AUTH_SERVICE_BASE_URL", "http://localhost:8001")
+    return {"avatar_url": f"{base_url}{avatar_url}"}
+
+
+@app.post("/users/me/banner")
+async def upload_banner(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Upload banner image"""
+    # Validate file type
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File must be an image"
+        )
+    
+    # Generate unique filename
+    file_extension = Path(file.filename).suffix if file.filename else ".jpg"
+    filename = f"banner_{current_user.id}{file_extension}"
+    file_path = UPLOAD_DIR / filename
+    
+    # Save file
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    # Update user's banner_url (store relative path, frontend will construct full URL)
+    banner_url = f"/static/{filename}"
+    current_user.banner_url = banner_url
+    
+    session.add(current_user)
+    await session.commit()
+    
+    # Return full URL for frontend
+    base_url = os.getenv("AUTH_SERVICE_BASE_URL", "http://localhost:8001")
+    return {"banner_url": f"{base_url}{banner_url}"}
 

@@ -41,6 +41,7 @@ services:
     volumes:
       - ./backend/auth-service:/app
       - ./backend/shared:/app/shared
+      - auth_uploads:/app/uploads
 
   # Course Service
   course_service:
@@ -119,4 +120,5 @@ networks:
 
 volumes:
   postgres_data:
+  auth_uploads:
 

@@ -10,6 +10,7 @@ import { CoursePlayer } from './pages/CoursePlayer';
 import { TeacherCourses } from './pages/TeacherCourses';
 import { CreateCourse } from './pages/CreateCourse';
 import { CourseDetails } from './pages/CourseDetails';
+import { Profile } from './pages/Profile';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 // Layout wrapper for authenticated pages
@@ -105,7 +106,7 @@ const App: React.FC = () => {
             <Route path="/teacher/create-course" element={<CreateCourse />} />
 
             <Route path="/analytics" element={<div className="p-10 text-center text-slate-500">Analytics Module Placeholder</div>} />
-            <Route path="/settings" element={<div className="p-10 text-center text-slate-500">Settings Module Placeholder</div>} />
+            <Route path="/profile" element={<Profile />} />
           </Route>
 
           {/* Fullscreen Player Route */}

@@ -17,14 +17,30 @@ class UserCreate(UserBase):
     password: str
 
 
+class UserUpdate(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    middle_name: Optional[str] = None
+    age: Optional[int] = None
+    phone_number: Optional[str] = None
+    country: Optional[str] = None
+    bio: Optional[str] = None
+
+
 class UserResponse(BaseModel):
     id: str
     email: EmailStr
     first_name: str
     last_name: str
+    middle_name: Optional[str] = None
     age: Optional[int] = None
+    phone_number: Optional[str] = None
+    country: Optional[str] = None
+    bio: Optional[str] = None
     role: Literal["student", "teacher"]
-    avatar: Optional[str] = None
+    avatar: Optional[str] = None  # Legacy field
+    avatar_url: Optional[str] = None
+    banner_url: Optional[str] = None
     name: Optional[str] = None  # Computed full name for backward compatibility
 
     class Config:

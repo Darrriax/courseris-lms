@@ -13,14 +13,14 @@ export const Sidebar: React.FC = () => {
     { name: 'All Courses', path: '/catalog', icon: BookOpen },
     // Removed My Courses from Sidebar as requested
     { name: 'Analytics', path: '/analytics', icon: BarChart2 },
-    { name: 'Settings', path: '/settings', icon: Settings },
+    { name: 'Profile', path: '/profile', icon: Settings },
   ];
 
   const teacherItems = [
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { name: 'My Courses', path: '/teacher/courses', icon: BookOpen },
     { name: 'Analytics', path: '/analytics', icon: BarChart2 },
-    { name: 'Settings', path: '/settings', icon: Settings },
+    { name: 'Profile', path: '/profile', icon: Settings },
   ];
 
   const navItems = user?.role === 'teacher' ? teacherItems : studentItems;
