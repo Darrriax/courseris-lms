@@ -7,7 +7,7 @@ import { Button } from '../components/Button';
 import { COUNTRIES } from '../constants/countries';
 
 export const Profile: React.FC = () => {
-  const { user: contextUser } = useAuth();
+  const { refreshProfile } = useAuth();
   const [user, setUser] = useState<UserResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -100,6 +100,8 @@ export const Profile: React.FC = () => {
         if (!prev) return null;
         return { ...prev, avatar_url: result.avatar_url, avatar: result.avatar_url };
       });
+      // Keep global auth state in sync so header updates instantly
+      await refreshProfile();
     } catch (err: any) {
       setError('Failed to upload avatar');
     }
@@ -117,6 +119,8 @@ export const Profile: React.FC = () => {
         if (!prev) return null;
         return { ...prev, banner_url: result.banner_url };
       });
+      // Keep global auth state in sync so header updates instantly
+      await refreshProfile();
     } catch (err: any) {
       setError('Failed to upload banner');
     }
@@ -149,6 +153,8 @@ export const Profile: React.FC = () => {
       const updatedUser = await authService.updateProfile(updateData);
       // Immediately update the local user state with the complete updated user data from the backend
       setUser(updatedUser);
+      // Refresh global auth state so header updates immediately
+      await refreshProfile();
       setOriginalFormData(formData);
       setSuccess(true);
       setIsEditing(false);

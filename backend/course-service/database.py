@@ -12,7 +12,6 @@ DATABASE_URL = os.getenv(
     "postgresql+asyncpg://courseris:courseris123@db:5432/courseris"
 )
 
-# Create async engine
 engine = create_async_engine(DATABASE_URL, echo=True, future=True)
 
 

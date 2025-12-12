@@ -104,6 +104,7 @@ const App: React.FC = () => {
             {/* Teacher Routes */}
             <Route path="/teacher/courses" element={<TeacherCourses />} />
             <Route path="/teacher/create-course" element={<CreateCourse />} />
+            <Route path="/teacher/edit-course/:courseId" element={<CreateCourse />} />
 
             <Route path="/analytics" element={<div className="p-10 text-center text-slate-500">Analytics Module Placeholder</div>} />
             <Route path="/profile" element={<Profile />} />

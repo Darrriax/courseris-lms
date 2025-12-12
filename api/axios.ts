@@ -4,7 +4,6 @@ const AUTH_SERVICE_URL = import.meta.env.VITE_AUTH_SERVICE_URL || 'http://localh
 const COURSE_SERVICE_URL = import.meta.env.VITE_COURSE_SERVICE_URL || 'http://localhost:8002';
 const LEARNING_SERVICE_URL = import.meta.env.VITE_LEARNING_SERVICE_URL || 'http://localhost:8003';
 
-// Create axios instances for each service
 export const authApi: AxiosInstance = axios.create({
   baseURL: AUTH_SERVICE_URL,
   headers: {
@@ -35,18 +34,15 @@ const attachToken = (config: InternalAxiosRequestConfig): InternalAxiosRequestCo
   return config;
 };
 
-// Add interceptors to all API instances
 [authApi, courseApi, learningApi].forEach((api) => {
   api.interceptors.request.use(attachToken, (error) => {
     return Promise.reject(error);
   });
 
-  // Response interceptor to handle token expiration
   api.interceptors.response.use(
     (response) => response,
     (error) => {
       if (error.response?.status === 401) {
-        // Token expired or invalid
         localStorage.removeItem('access_token');
         localStorage.removeItem('user');
         window.location.href = '/';

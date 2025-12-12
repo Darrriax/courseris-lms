@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { User } from '../types';
 import { authService, LoginCredentials, RegisterData, UserResponse as ApiUserResponse } from '../api/auth';
 
@@ -8,6 +8,7 @@ interface AuthContextType {
   login: (credentials: LoginCredentials) => Promise<void>;
   register: (userData: RegisterData) => Promise<void>;
   logout: () => void;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -17,7 +18,7 @@ const mapApiUserToUser = (apiUser: ApiUserResponse): User => {
   return {
     id: apiUser.id,
     name: apiUser.name || `${apiUser.first_name} ${apiUser.last_name}`,
-    avatar: apiUser.avatar || `https://picsum.photos/seed/${apiUser.email}/100/100`,
+    avatar: apiUser.avatar_url || apiUser.avatar || `https://picsum.photos/seed/${apiUser.email}/100/100`,
     email: apiUser.email,
     role: apiUser.role,
   };
@@ -27,14 +28,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const refreshProfile = useCallback(async () => {
+    try {
+      const apiUser = await authService.getCurrentUser();
+      const mappedUser = mapApiUserToUser(apiUser);
+      setUser(mappedUser);
+      localStorage.setItem('user', JSON.stringify(mappedUser));
+    } catch (error) {
+      // If refresh fails, keep existing user; errors will surface in the caller if needed
+      throw error;
+    }
+  }, []);
+
   // Check for existing token and load user on mount
   useEffect(() => {
     const initAuth = async () => {
       const token = localStorage.getItem('access_token');
       if (token) {
         try {
-          const apiUser = await authService.getCurrentUser();
-          setUser(mapApiUserToUser(apiUser));
+          await refreshProfile();
         } catch (error) {
           // Token invalid, clear it
           localStorage.removeItem('access_token');
@@ -52,10 +64,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       localStorage.setItem('access_token', authResponse.access_token);
       
       // Fetch user info
-      const apiUser = await authService.getCurrentUser();
-      const mappedUser = mapApiUserToUser(apiUser);
-      setUser(mappedUser);
-      localStorage.setItem('user', JSON.stringify(mappedUser));
+      await refreshProfile();
     } catch (error: any) {
       const errorMessage = error.response?.data?.detail || 'Login failed. Please try again.';
       throw new Error(errorMessage);
@@ -64,8 +73,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const register = async (userData: RegisterData) => {
     try {
-      const apiUser = await authService.register(userData);
-      
+      await authService.register(userData);
+
       // Automatically log in after registration
       const loginResponse = await authService.login({
         email: userData.email,
@@ -73,9 +82,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
       
       localStorage.setItem('access_token', loginResponse.access_token);
-      const mappedUser = mapApiUserToUser(apiUser);
-      setUser(mappedUser);
-      localStorage.setItem('user', JSON.stringify(mappedUser));
+      await refreshProfile();
     } catch (error: any) {
       const errorMessage = error.response?.data?.detail || 'Registration failed. Please try again.';
       throw new Error(errorMessage);
@@ -89,7 +96,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );
