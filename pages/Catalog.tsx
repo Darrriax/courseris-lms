@@ -1,17 +1,65 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Filter, ChevronDown } from 'lucide-react';
-import { CATALOG_COURSES } from '../constants';
 import { CourseCard } from '../components/CourseCard';
 import { Button } from '../components/Button';
+import { courseApi } from '../api/axios';
+import { Course } from '../types';
 
 export const Catalog: React.FC = () => {
+  const COURSE_BASE =
+    import.meta.env.VITE_COURSE_SERVICE_URL || 'http://localhost:8002';
   const [activeCategory, setActiveCategory] = useState('All');
-  
-  const categories = ['All', 'Development', 'Design', 'Business', 'Marketing', 'IT'];
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredCourses = activeCategory === 'All' 
-    ? CATALOG_COURSES 
-    : CATALOG_COURSES.filter(c => c.category === activeCategory);
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        setLoading(true);
+        const response = await courseApi.get('/courses');
+        const data = response.data as any[];
+        const mapped: Course[] = data.map((c) => ({
+          id: c.id,
+          title: c.title,
+          author: c.author || '',
+          thumbnail:
+            makeAbsolute(c.thumbnail_url || c.thumbnail, COURSE_BASE) ||
+            'https://picsum.photos/400/250',
+          thumbnail_url: c.thumbnail_url,
+          category: c.category || 'General',
+          price: c.price,
+          rating: c.rating ?? 0,
+          totalStudents: c.totalStudents ?? c.total_students ?? 0,
+          duration: c.duration,
+          description: c.description,
+          status: normalizeStatus(c.status),
+          createdAt: c.createdAt,
+          teacher_id: c.teacher_id,
+        }));
+        setCourses(mapped);
+      } catch (err) {
+        console.error('Failed to load courses', err);
+        setError('Unable to load courses. Please try again later.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchCourses();
+  }, []);
+  
+  const categories = useMemo(() => {
+    const unique = Array.from(new Set(courses.map((c) => c.category || 'Other')));
+    return ['All', ...unique];
+  }, [courses]);
+
+  const filteredCourses = useMemo(
+    () =>
+      activeCategory === 'All'
+        ? courses
+        : courses.filter((c) => c.category === activeCategory),
+    [activeCategory, courses]
+  );
 
   return (
     <div className="space-y-8">
@@ -49,7 +97,15 @@ export const Catalog: React.FC = () => {
       </div>
 
       {/* Grid */}
-      {filteredCourses.length > 0 ? (
+      {loading ? (
+        <div className="text-center py-20 text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+          Loading courses...
+        </div>
+      ) : error ? (
+        <div className="text-center py-20 text-slate-500 bg-red-50 rounded-xl border border-dashed border-red-200">
+          {error}
+        </div>
+      ) : filteredCourses.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filteredCourses.map((course) => (
             <CourseCard key={course.id} course={course} variant="catalog" />
@@ -63,4 +119,17 @@ export const Catalog: React.FC = () => {
       )}
     </div>
   );
+};
+
+const makeAbsolute = (url: string | undefined, base: string) => {
+  if (!url) return '';
+  if (url.startsWith('http')) return url;
+  return `${base}${url}`;
+};
+
+const normalizeStatus = (value?: string) => {
+  const upper = (value || '').toUpperCase();
+  if (upper === 'PUBLISHED') return 'Published';
+  if (upper === 'ARCHIVED') return 'Archived';
+  return 'Draft';
 };

@@ -200,6 +200,16 @@ export const CreateCourse: React.FC = () => {
           >
             Cancel
           </Button>
+          {courseId && (
+            <Button
+              variant="outline"
+              onClick={() =>
+                window.open(`#/course/${courseId}/learn`, '_blank', 'noopener')
+              }
+            >
+              Preview
+            </Button>
+          )}
           <Button
             onClick={() => saveCourse()}
             className="gap-2"
@@ -841,30 +851,35 @@ const VideoEditor: React.FC<{
 }> = ({ initialContent, onSave }) => {
   const [file, setFile] = useState<File | null>(null);
   const [uploadedVideoUrl, setUploadedVideoUrl] = useState<string | null>(null);
+  const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
   const [description, setDescription] = useState(
     initialContent?.description || ''
   );
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [videoRemoved, setVideoRemoved] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const videoSrc = React.useMemo(() => {
+    // Priority: videoPreviewUrl (immediate local preview) > uploadedVideoUrl (server URL) > initialContent (existing lesson)
+    if (videoPreviewUrl) {
+      return videoPreviewUrl;
+    }
+
     if (uploadedVideoUrl) {
       return getAssetUrl(uploadedVideoUrl);
     }
 
-    if (file && !uploadedVideoUrl) {
-      return URL.createObjectURL(file);
-    }
-
-    if (initialContent?.fileName) {
+    if (initialContent?.fileName && !videoRemoved) {
       const fileName = initialContent.fileName;
-      if (fileName.startsWith('http')) return fileName;
+      if (fileName.startsWith('http')) {
+        return fileName;
+      }
       return getAssetUrl(fileName);
     }
 
     return null;
-  }, [file, uploadedVideoUrl, initialContent]);
+  }, [videoPreviewUrl, uploadedVideoUrl, initialContent, videoRemoved]);
 
   React.useEffect(() => {
     if (initialContent?.description !== undefined) {
@@ -877,17 +892,33 @@ const VideoEditor: React.FC<{
 
   React.useEffect(() => {
     return () => {
-      if (file && videoSrc?.startsWith('blob:')) {
-        revokeFilePreviewUrl(videoSrc);
+      if (videoPreviewUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(videoPreviewUrl);
       }
     };
-  }, [file, videoSrc]);
+  }, [videoPreviewUrl]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
+
+      // Validate file type - only MP4 allowed
+      if (selectedFile.type !== 'video/mp4') {
+        alert('Only MP4 format is allowed. Please select an MP4 video file.');
+        // Clear the input so user can try again
+        if (e.target) {
+          e.target.value = '';
+        }
+        return;
+      }
+
       setFile(selectedFile);
 
+      // Create immediate local preview
+      const localPreviewUrl = URL.createObjectURL(selectedFile);
+      setVideoPreviewUrl(localPreviewUrl);
+
+      // Start background upload
       setUploading(true);
       setProgress(0);
 
@@ -918,22 +949,30 @@ const VideoEditor: React.FC<{
       } catch (error) {
         setUploading(false);
         setProgress(0);
+        // If upload fails, keep the local preview but show error
+        console.error('Upload failed:', error);
       }
     }
   };
 
   const handleRemoveFile = () => {
-    if (file && videoSrc?.startsWith('blob:')) {
-      revokeFilePreviewUrl(videoSrc);
+    if (videoPreviewUrl?.startsWith('blob:')) {
+      URL.revokeObjectURL(videoPreviewUrl);
+    }
+    // Clear file input value so onChange can trigger again for the same file
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
     setFile(null);
     setUploadedVideoUrl(null);
+    setVideoPreviewUrl(null);
     setDescription('');
     setProgress(0);
     setVideoRemoved(true);
   };
 
   const handleSave = () => {
+    // If no file is selected, no video was uploaded, and no description, and no existing content
     if (
       !file &&
       !uploadedVideoUrl &&
@@ -944,173 +983,186 @@ const VideoEditor: React.FC<{
       return;
     }
 
-    if (
-      !file &&
-      !uploadedVideoUrl &&
-      !description.trim() &&
-      initialContent?.fileName
-    ) {
-      onSave(null);
+    // Only save if we have either an uploaded video URL or existing content
+    if (!uploadedVideoUrl && !initialContent?.fileName) {
+      // Don't save if we started uploading but it failed
+      return;
+    }
+
+    const fileNameToSave = uploadedVideoUrl || initialContent?.fileName;
+    if (!fileNameToSave) {
       return;
     }
 
     onSave({
-      fileName: uploadedVideoUrl || initialContent?.fileName || 'untitled.mp4',
+      fileName: fileNameToSave,
       description: description.trim() || null,
       duration: '10:00',
     });
   };
 
+  const modules = useMemo(
+    () => ({
+      toolbar: [
+        [{ header: [1, 2, false] }, { size: [] }],
+        ['bold', 'italic', 'underline', 'strike'],
+        [{ color: [] }, { background: [] }],
+        [{ list: 'ordered' }, { list: 'bullet' }],
+        ['link', 'blockquote', 'code-block'],
+        ['clean'],
+      ],
+    }),
+    []
+  );
+
+  const formats = [
+    'header',
+    'size',
+    'bold',
+    'italic',
+    'underline',
+    'strike',
+    'color',
+    'background',
+    'list',
+    'bullet',
+    'link',
+    'blockquote',
+    'code-block',
+  ];
+
+  // Check if we have any video content (local preview, uploaded, or initial)
+  const hasVideo = videoSrc || (initialContent?.fileName && !videoRemoved);
+
   return (
     <div className="space-y-6">
-      {/* Video Preview */}
-      {(videoSrc || (initialContent?.fileName && !videoRemoved)) && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h4 className="text-sm font-medium text-slate-700">
-              Video Content
-            </h4>
-            {(videoSrc || (initialContent?.fileName && !videoRemoved)) && (
+      {/* Unified Video Container */}
+      <div className="relative w-full aspect-video bg-slate-100 border-2 border-slate-200 rounded-lg overflow-hidden">
+        {hasVideo ? (
+          /* Video Preview Mode */
+          <>
+            {/* Overlay Controls */}
+            <div className="absolute top-4 right-4 z-10 flex gap-2">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs bg-black/70 text-white hover:bg-black/80 rounded-md transition-colors backdrop-blur-sm"
+                disabled={uploading}
+              >
+                <Upload className="w-4 h-4" />
+                Replace
+              </button>
               <button
                 onClick={handleRemoveFile}
-                className="flex items-center gap-2 px-3 py-1.5 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors"
+                className="flex items-center gap-1 px-3 py-1.5 text-xs bg-red-600/70 text-white hover:bg-red-600/80 rounded-md transition-colors backdrop-blur-sm"
                 disabled={uploading}
               >
                 <Trash2 className="w-4 h-4" />
-                Remove Video
+                Delete
               </button>
-            )}
-          </div>
-
-          {/* Show VideoPlayer for any video source (new or existing) */}
-          {videoSrc && <VideoPlayer src={videoSrc} />}
-
-          {/* Fallback for saved content without videoSrc (shouldn't happen with current logic) */}
-          {initialContent?.fileName && !videoSrc && (
-            <div className="bg-slate-100 border border-slate-200 rounded-lg p-6 text-center">
-              <Video className="w-12 h-12 text-slate-400 mx-auto mb-3" />
-              <p className="text-sm text-slate-600 mb-2">
-                Saved Video: {initialContent.fileName}
-              </p>
-              <p className="text-xs text-slate-500">
-                Unable to load video preview.
-              </p>
             </div>
-          )}
 
-          {/* Video Description */}
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-slate-700">
-              Video Description (Optional)
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Add a description for this video lesson..."
-              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none resize-vertical min-h-[80px]"
-              rows={3}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* File Upload/Info Section */}
-      <div className="bg-white p-8 rounded-xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center min-h-[200px] text-center">
-        {!file && (!initialContent?.fileName || videoRemoved) ? (
-          <>
-            <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mb-4">
-              <Upload className="w-8 h-8" />
-            </div>
-            <h4 className="text-lg font-medium text-slate-900 mb-2">
-              Upload Video File
-            </h4>
-            <p className="text-slate-500 mb-6 max-w-sm">
-              Drag and drop your video file here, or click to browse. Supports
-              MP4, MOV, and AVI.
-            </p>
-            <label className="cursor-pointer">
-              <input
-                type="file"
-                className="hidden"
-                accept="video/*"
-                onChange={handleFileChange}
-              />
-              <div className="px-6 py-2.5 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors">
-                Select File
+            {/* Upload Progress Overlay */}
+            {uploading && (
+              <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-5">
+                <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4">
+                  <div className="text-center mb-4">
+                    <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-3">
+                      <Upload className="w-6 h-6" />
+                    </div>
+                    <p className="text-sm font-medium text-slate-900">Uploading Video...</p>
+                    <p className="text-xs text-slate-500">Please wait while we process your video</p>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-xs font-medium text-slate-600">
+                      <span>Progress</span>
+                      <span>{progress}%</span>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="bg-indigo-600 h-full transition-all duration-300"
+                        style={{ width: `${progress}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </label>
+            )}
+
+            {/* Video Player */}
+            {videoSrc ? (
+              <video
+                src={videoSrc}
+                controls
+                className="w-full h-full object-contain"
+                poster=""
+              />
+            ) : (
+              /* Fallback for saved content without videoSrc */
+              <div className="w-full h-full flex items-center justify-center">
+                <div className="text-center">
+                  <Video className="w-16 h-16 text-slate-400 mx-auto mb-4" />
+                  <p className="text-sm text-slate-600 mb-2">
+                    Saved Video: {initialContent.fileName}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    Unable to load video preview.
+                  </p>
+                </div>
+              </div>
+            )}
           </>
         ) : (
-          <div className="w-full max-w-md space-y-4">
-            <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-lg border border-slate-200 text-left">
-              <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded flex items-center justify-center flex-shrink-0">
-                <Video className="w-5 h-5" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-slate-900 truncate">
-                  {file?.name ||
-                    uploadedVideoUrl ||
-                    initialContent?.fileName ||
-                    'No file selected'}
-                </p>
-                <p className="text-xs text-slate-500">
-                  {uploading
-                    ? `Uploading... ${progress}%`
-                    : uploadedVideoUrl
-                      ? 'Video uploaded'
-                      : file
-                        ? 'Ready to publish'
-                        : 'Select a video file'}
-                </p>
-              </div>
-              {!uploading && (
-                <button
-                  onClick={handleRemoveFile}
-                  className="text-slate-400 hover:text-red-500"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
-              )}
+          /* Upload Mode */
+          <div className="w-full h-full flex flex-col items-center justify-center p-8 text-center">
+            <div className="w-20 h-20 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mb-6">
+              <Upload className="w-10 h-10" />
             </div>
-
-            {/* Replace file option */}
-            {!uploading && (
-              <div className="flex justify-center">
-                <label className="cursor-pointer">
-                  <input
-                    type="file"
-                    className="hidden"
-                    accept="video/*"
-                    onChange={handleFileChange}
-                  />
-                  <div className="px-4 py-2 text-sm bg-slate-100 text-slate-700 font-medium rounded-lg hover:bg-slate-200 transition-colors">
-                    Replace Video
-                  </div>
-                </label>
-              </div>
-            )}
-
-            {(uploading || progress > 0) && (
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs font-medium text-slate-600">
-                  <span>Upload Progress</span>
-                  <span>{progress}%</span>
-                </div>
-                <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
-                  <div
-                    className="bg-indigo-600 h-full transition-all duration-300"
-                    style={{ width: `${progress}%` }}
-                  ></div>
-                </div>
-              </div>
-            )}
+            <h4 className="text-xl font-medium text-slate-900 mb-3">
+              Upload Video File
+            </h4>
+            <p className="text-slate-500 mb-8 max-w-md">
+              Drag and drop your video file here, or click to browse. Supports
+              MP4 format only.
+            </p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              accept="video/mp4"
+              onChange={handleFileChange}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="px-8 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+            >
+              Select Video File
+            </button>
           </div>
         )}
       </div>
 
-      <div className="flex justify-end pt-4">
+      {/* Video Description */}
+      <div className="space-y-2">
+        <label className="block text-sm font-medium text-slate-700">
+          Video Description (Optional)
+        </label>
+        <div className="min-h-[200px] bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+          <ReactQuill
+            theme="snow"
+            value={description}
+            onChange={setDescription}
+            modules={modules}
+            formats={formats}
+            placeholder="Add a description for this video lesson..."
+            className="h-[160px] [&_.ql-toolbar]:border-slate-200 [&_.ql-container]:border-slate-200"
+          />
+        </div>
+      </div>
+
+      {/* Save Button */}
+      <div className="flex justify-end pt-4 border-t border-slate-200">
         <Button onClick={handleSave} disabled={uploading}>
-          Save Video
+          Save Changes
         </Button>
       </div>
     </div>

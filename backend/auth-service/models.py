@@ -16,11 +16,12 @@ class User(SQLModel, table=True):
     first_name: str
     last_name: str
     middle_name: Optional[str] = None
-    age: Optional[int] = None
+    age: Optional[int] = Field(default=None, nullable=True)
     phone_number: Optional[str] = None
     country: Optional[str] = None
     bio: Optional[str] = None
     role: str = Field(default="student")  # "student" or "teacher"
+    gender: str = Field(default="MALE", nullable=False)  # "MALE" or "FEMALE"
     avatar: Optional[str] = None  # Legacy field for backward compatibility
     avatar_url: Optional[str] = None
     banner_url: Optional[str] = None

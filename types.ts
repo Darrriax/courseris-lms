@@ -4,6 +4,8 @@ export interface User {
   avatar: string;
   email: string;
   role: 'student' | 'teacher';
+  gender?: 'MALE' | 'FEMALE';
+  created_at?: string;
 }
 
 export interface Lesson {
@@ -27,6 +29,7 @@ export interface Course {
   title: string;
   author: string;
   thumbnail: string;
+  thumbnail_url?: string;
   category: string;
   price: number | 'Free';
   rating: number;
@@ -37,6 +40,7 @@ export interface Course {
   description?: string;
   status?: 'Published' | 'Draft' | 'Archived';
   createdAt?: string;
+  teacher_id?: string;
 }
 
 export interface Stat {
@@ -45,4 +49,18 @@ export interface Stat {
   value: string;
   icon: 'activity' | 'flame' | 'award';
   color: 'blue' | 'orange' | 'yellow';
+}
+
+export interface CourseQuestion {
+  id: string;
+  course_id: string;
+  course_title?: string;
+  teacher_id: string;
+  student_id: string;
+  student_name?: string;
+  message: string;
+  reply?: string;
+  status: 'open' | 'answered';
+  created_at?: string;
+  replied_at?: string | null;
 }

@@ -1,13 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import {
-  Plus,
-  Users,
-  Star,
-  Clock,
-  MoreHorizontal,
-  Edit2,
-  BookOpen,
-} from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Plus, Clock, MoreHorizontal, Edit2, BookOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/Button';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -21,7 +13,6 @@ export const TeacherCourses: React.FC = () => {
   const COURSE_BASE =
     import.meta.env.VITE_COURSE_SERVICE_URL || 'http://localhost:8002';
   const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const menuRef = React.useRef<HTMLDivElement | null>(null);
   const [courseToDelete, setCourseToDelete] = useState<string | null>(null);
 
   useEffect(() => {
@@ -42,7 +33,7 @@ export const TeacherCourses: React.FC = () => {
           totalStudents: c.totalStudents ?? c.total_students ?? 0,
           duration: c.duration,
           description: c.description,
-          status: c.status || 'Draft',
+          status: normalizeStatus(c.status),
           createdAt: c.createdAt,
         }));
         setCourses(mapped);
@@ -54,33 +45,6 @@ export const TeacherCourses: React.FC = () => {
     };
     fetchCourses();
   }, []);
-
-  const totalStudents = useMemo(
-    () => courses.reduce((acc, course) => acc + (course.totalStudents || 0), 0),
-    [courses]
-  );
-  const activeCourses = useMemo(
-    () => courses.filter((c) => c.status === 'Published').length,
-    [courses]
-  );
-  const draftCourses = useMemo(
-    () => courses.filter((c) => c.status === 'Draft').length,
-    [courses]
-  );
-  const totalRatings = useMemo(
-    () =>
-      courses.reduce(
-        (acc, course) => acc + (course.rating && course.rating > 0 ? 1 : 0),
-        0
-      ),
-    [courses]
-  );
-  const sumRatings = useMemo(
-    () => courses.reduce((acc, course) => acc + (course.rating || 0), 0),
-    [courses]
-  );
-  const avgRating =
-    totalRatings > 0 ? (sumRatings / totalRatings).toFixed(1) : '0.0';
 
   const handleRequestDelete = (id: string) => {
     setCourseToDelete(id);
@@ -121,18 +85,20 @@ export const TeacherCourses: React.FC = () => {
 
   React.useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (!menuRef.current) return;
-      if (e.target instanceof Node && !menuRef.current.contains(e.target)) {
+      const target = e.target as HTMLElement | null;
+      const menuRoot = target?.closest('[data-menu-root]');
+      if (!menuRoot) {
+        setOpenMenu(null);
+        return;
+      }
+      const menuId = menuRoot.getAttribute('data-menu-root');
+      if (!menuId || menuId !== openMenu) {
         setOpenMenu(null);
       }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const totalCourses = activeCourses + draftCourses;
-  const activePercentage =
-    totalCourses > 0 ? (activeCourses / totalCourses) * 100 : 0;
+  }, [openMenu]);
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -155,87 +121,14 @@ export const TeacherCourses: React.FC = () => {
         </div>
       </div>
 
-      {/* Global Stats Dashboard */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Total Students */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex items-center gap-4">
-          <div className="p-4 bg-blue-50 text-blue-600 rounded-full">
-            <Users className="w-8 h-8" />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-slate-500">Total Students</p>
-            <h3 className="text-3xl font-bold text-slate-900">
-              {totalStudents}
-            </h3>
-          </div>
-        </div>
-
-        {/* Avg Rating */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex items-center gap-4">
-          <div className="p-4 bg-yellow-50 text-yellow-600 rounded-full">
-            <Star className="w-8 h-8 fill-current" />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-slate-500">Average Rating</p>
-            <h3 className="text-3xl font-bold text-slate-900">{avgRating}</h3>
-            <p className="text-xs text-slate-400">
-              Across {activeCourses} active courses
-            </p>
-          </div>
-        </div>
-
-        {/* Active Courses Chart */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex items-center gap-6">
-          {/* CSS Conic Gradient Donut Chart */}
-          <div
-            className="relative w-20 h-20 rounded-full flex-shrink-0"
-            style={{
-              background: `conic-gradient(#4f46e5 ${activePercentage}%, #e2e8f0 ${activePercentage}% 100%)`,
-            }}
-          >
-            <div className="absolute inset-2 bg-white rounded-full flex items-center justify-center">
-              <span className="text-sm font-bold text-slate-900">
-                {Math.round(activePercentage)}%
-              </span>
-            </div>
-          </div>
-          <div className="flex-1">
-            <p className="text-sm font-medium text-slate-500 mb-1">
-              Course Status
-            </p>
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-indigo-600"></div>
-                  <span className="text-slate-700">Active</span>
-                </div>
-                <span className="font-semibold text-slate-900">
-                  {activeCourses}
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-slate-200"></div>
-                  <span className="text-slate-700">Draft</span>
-                </div>
-                <span className="font-semibold text-slate-900">
-                  {draftCourses}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Courses List Section */}
       <div className="space-y-4">
         <h2 className="text-xl font-bold text-slate-900">All Courses</h2>
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-visible">
           {/* Table Header - Visible on desktop */}
-          <div className="hidden md:grid grid-cols-12 gap-4 p-4 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            <div className="col-span-5">Course Details</div>
+          <div className="hidden md:grid grid-cols-10 gap-4 p-4 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            <div className="col-span-6">Course Details</div>
             <div className="col-span-2">Created</div>
-            <div className="col-span-3">Statistics</div>
             <div className="col-span-2 text-right">Actions</div>
           </div>
 
@@ -263,13 +156,12 @@ export const TeacherCourses: React.FC = () => {
                   course={course}
                   onDelete={handleRequestDelete}
                   onStatus={handleStatus}
-                  onOpen={(id) => navigate(`/course/${id}`)}
+                  onOpen={(id) => navigate(`/teacher/courses/${id}`)}
                   onEdit={(id) => navigate(`/teacher/edit-course/${id}`)}
                   isMenuOpen={openMenu === course.id}
                   onToggleMenu={(id) =>
                     setOpenMenu((prev) => (prev === id ? null : id))
                   }
-                  menuRef={menuRef}
                 />
               ))
             )}
@@ -297,7 +189,6 @@ const TeacherCourseRow: React.FC<{
   onEdit: (id: string) => void;
   isMenuOpen: boolean;
   onToggleMenu: (id: string) => void;
-  menuRef: React.RefObject<HTMLDivElement>;
 }> = ({
   course,
   onDelete,
@@ -306,17 +197,17 @@ const TeacherCourseRow: React.FC<{
   onEdit,
   isMenuOpen,
   onToggleMenu,
-  menuRef,
 }) => {
-  const isDraft = course.status === 'Draft';
+  const statusNormalized = (course.status || '').toUpperCase();
+  const isPublished = statusNormalized === 'PUBLISHED';
   const created = formatDate(course.createdAt);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 p-4 items-center hover:bg-slate-50 transition-colors group">
+    <div className="grid grid-cols-1 md:grid-cols-10 gap-4 p-4 items-center hover:bg-slate-50 transition-colors group">
       {/* 1. Course Info */}
       <button
         onClick={() => onOpen(course.id)}
-        className="col-span-1 md:col-span-5 flex gap-4 text-left hover:opacity-90"
+        className="col-span-1 md:col-span-6 flex gap-4 text-left hover:opacity-90"
       >
         <div className="w-24 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-slate-100 border border-slate-200">
           <img
@@ -325,21 +216,23 @@ const TeacherCourseRow: React.FC<{
             className="w-full h-full object-cover"
           />
         </div>
-        <div className="flex flex-col justify-center">
+        <div className="flex flex-col justify-center gap-1">
+          <div className="flex items-center gap-2">
           <h3 className="font-semibold text-slate-900 line-clamp-1 group-hover:text-indigo-600 transition-colors">
             {course.title}
           </h3>
-          <div className="flex items-center gap-2 mt-1">
             <span
-              className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                isDraft
-                  ? 'bg-slate-100 text-slate-600 border border-slate-200'
-                  : 'bg-green-100 text-green-700 border border-green-200'
+              className={`text-[10px] px-2 py-0.5 rounded-full font-semibold tracking-wide uppercase border ${
+                isPublished
+                  ? 'bg-green-50 text-green-700 border-green-200'
+                  : 'bg-slate-100 text-slate-600 border-slate-200'
               }`}
             >
-              {course.status || 'Active'}
+              {isPublished ? 'Published' : 'Draft'}
             </span>
-            <span className="text-xs text-slate-500">• {course.category}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500">{course.category}</span>
           </div>
         </div>
       </button>
@@ -350,25 +243,7 @@ const TeacherCourseRow: React.FC<{
         {created}
       </div>
 
-      {/* 3. Statistics */}
-      <div className="col-span-1 md:col-span-3 flex items-center gap-6">
-        <div className="flex items-center gap-2" title="Total Students">
-          <Users className="w-4 h-4 text-slate-400" />
-          <span className="text-sm font-medium text-slate-700">
-            {course.totalStudents}
-          </span>
-        </div>
-        <div className="flex items-center gap-2" title="Rating">
-          <Star
-            className={`w-4 h-4 ${course.rating > 0 ? 'fill-yellow-400 text-yellow-400' : 'text-slate-300'}`}
-          />
-          <span className="text-sm font-medium text-slate-700">
-            {course.rating > 0 ? course.rating : '-'}
-          </span>
-        </div>
-      </div>
-
-      {/* 4. Actions */}
+      {/* 3. Actions */}
       <div className="col-span-1 md:col-span-2 flex justify-end items-center gap-2">
         <Button
           size="sm"
@@ -379,7 +254,7 @@ const TeacherCourseRow: React.FC<{
           <Edit2 className="w-4 h-4" />
           <span className="hidden md:inline">Edit</span>
         </Button>
-        <div className="relative" ref={menuRef}>
+        <div className="relative" data-menu-root={course.id}>
           <button
             onClick={() => onToggleMenu(course.id)}
             className="p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 rounded-lg transition-colors"
@@ -388,6 +263,17 @@ const TeacherCourseRow: React.FC<{
           </button>
           {isMenuOpen && (
             <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+              {isPublished ? (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onStatus(course.id, 'Draft');
+                  }}
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 text-amber-700"
+                >
+                  Unpublish (Draft)
+                </button>
+              ) : (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -397,15 +283,7 @@ const TeacherCourseRow: React.FC<{
               >
                 Publish
               </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onStatus(course.id, 'Draft');
-                }}
-                className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 text-slate-700"
-              >
-                Draft
-              </button>
+              )}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -427,6 +305,13 @@ const makeAbsolute = (url: string | undefined, base: string) => {
   if (!url) return '';
   if (url.startsWith('http')) return url;
   return `${base}${url}`;
+};
+
+const normalizeStatus = (value?: string) => {
+  const upper = (value || '').toUpperCase();
+  if (upper === 'PUBLISHED') return 'Published';
+  if (upper === 'ARCHIVED') return 'Archived';
+  return 'Draft';
 };
 
 const formatDate = (value?: string) => {

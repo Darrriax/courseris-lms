@@ -10,6 +10,7 @@ export interface RegisterData {
   last_name: string;
   age?: number;
   role: 'student' | 'teacher';
+  gender: 'MALE' | 'FEMALE';
   email: string;
   password: string;
 }
@@ -30,10 +31,12 @@ export interface UserResponse {
   country?: string;
   bio?: string;
   role: 'student' | 'teacher';
+  gender: 'MALE' | 'FEMALE';
   avatar?: string;
   avatar_url?: string;
   banner_url?: string;
   name?: string;
+  created_at?: string;
 }
 
 export interface UserUpdateData {
@@ -72,6 +75,11 @@ export const authService = {
 
   async updateProfile(userData: UserUpdateData): Promise<UserResponse> {
     const response = await authApi.put<UserResponse>('/users/me', userData);
+    return response.data;
+  },
+
+  async getPublicUser(userId: string): Promise<UserResponse> {
+    const response = await authApi.get<UserResponse>(`/users/${userId}/public`);
     return response.data;
   },
 

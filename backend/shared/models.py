@@ -2,6 +2,7 @@
 Shared Pydantic models based on frontend types.ts
 """
 from typing import Optional, Literal
+from datetime import datetime
 from pydantic import BaseModel, EmailStr
 
 
@@ -11,6 +12,7 @@ class UserBase(BaseModel):
     last_name: str
     age: Optional[int] = None
     role: Literal["student", "teacher"]
+    gender: Literal["MALE", "FEMALE"]
 
 
 class UserCreate(UserBase):
@@ -25,6 +27,7 @@ class UserUpdate(BaseModel):
     phone_number: Optional[str] = None
     country: Optional[str] = None
     bio: Optional[str] = None
+    gender: Optional[Literal["MALE", "FEMALE"]] = None
 
 
 class UserResponse(BaseModel):
@@ -38,10 +41,12 @@ class UserResponse(BaseModel):
     country: Optional[str] = None
     bio: Optional[str] = None
     role: Literal["student", "teacher"]
+    gender: Literal["MALE", "FEMALE"]
     avatar: Optional[str] = None  # Legacy field
     avatar_url: Optional[str] = None
     banner_url: Optional[str] = None
     name: Optional[str] = None  # Computed full name for backward compatibility
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

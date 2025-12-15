@@ -21,6 +21,7 @@ const mapApiUserToUser = (apiUser: ApiUserResponse): User => {
     avatar: apiUser.avatar_url || apiUser.avatar || `https://picsum.photos/seed/${apiUser.email}/100/100`,
     email: apiUser.email,
     role: apiUser.role,
+    gender: apiUser.gender,
   };
 };
 

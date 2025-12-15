@@ -16,6 +16,24 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const processedSrc = getAssetUrl(src);
   const processedPoster = poster ? getAssetUrl(poster) : undefined;
 
+  // Don't render if we have an invalid URL like 'untitled.mp4'
+  if (!processedSrc || processedSrc.includes('untitled.mp4')) {
+    return (
+      <div className={`relative w-full max-w-xl mx-auto ${className}`}>
+        <div className="relative w-full pb-[56.25%] bg-slate-100 rounded-lg shadow-sm border border-slate-200 overflow-hidden flex items-center justify-center">
+          <div className="text-center text-slate-500">
+            <div className="w-12 h-12 mx-auto mb-2 opacity-50">
+              <svg className="w-full h-full" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z"/>
+              </svg>
+            </div>
+            <p className="text-sm">Video not available</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`relative w-full max-w-xl mx-auto ${className}`}>
       {/* Fixed 16:9 aspect ratio container */}

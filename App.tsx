@@ -5,12 +5,14 @@ import { Header } from './components/Header';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { Dashboard } from './pages/Dashboard';
+import { Analytics } from './pages/Analytics';
 import { Catalog } from './pages/Catalog';
 import { CoursePlayer } from './pages/CoursePlayer';
 import { TeacherCourses } from './pages/TeacherCourses';
 import { CreateCourse } from './pages/CreateCourse';
 import { CourseDetails } from './pages/CourseDetails';
 import { Profile } from './pages/Profile';
+import { TeacherProfile } from './pages/TeacherProfile';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 // Layout wrapper for authenticated pages
@@ -91,7 +93,6 @@ const App: React.FC = () => {
               </PublicRoute>
             } 
           />
-          
           {/* Protected Routes */}
           <Route element={<DashboardLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
@@ -99,19 +100,24 @@ const App: React.FC = () => {
             {/* Student Routes */}
             <Route path="/catalog" element={<Catalog />} />
             <Route path="/my-courses" element={<Catalog />} /> {/* Reusing Catalog for demo */}
+            <Route path="/courses/:courseId" element={<CourseDetails />} />
             <Route path="/course-overview/:courseId" element={<CourseDetails />} />
+            <Route path="/teacher/:id" element={<TeacherProfile />} />
             
             {/* Teacher Routes */}
             <Route path="/teacher/courses" element={<TeacherCourses />} />
+            <Route path="/teacher/courses/:courseId" element={<CourseDetails />} />
             <Route path="/teacher/create-course" element={<CreateCourse />} />
             <Route path="/teacher/edit-course/:courseId" element={<CreateCourse />} />
 
-            <Route path="/analytics" element={<div className="p-10 text-center text-slate-500">Analytics Module Placeholder</div>} />
+            <Route path="/analytics" element={<Analytics />} />
             <Route path="/profile" element={<Profile />} />
           </Route>
 
           {/* Fullscreen Player Route */}
           <Route path="/course/:courseId" element={<CoursePlayer />} />
+          <Route path="/course/:courseId/learn" element={<CoursePlayer />} />
+          <Route path="/course/:courseId/learn/:lessonId" element={<CoursePlayer />} />
         </Routes>
       </HashRouter>
     </AuthProvider>

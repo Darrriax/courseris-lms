@@ -11,6 +11,7 @@ export const Register: React.FC = () => {
     last_name: '',
     age: '',
     role: 'student' as 'student' | 'teacher',
+    gender: 'MALE' as 'MALE' | 'FEMALE',
     email: '',
     password: '',
   });
@@ -43,6 +44,7 @@ export const Register: React.FC = () => {
         last_name: formData.last_name,
         age: formData.age ? parseInt(formData.age) : undefined,
         role: formData.role,
+        gender: formData.gender,
         email: formData.email,
         password: formData.password,
       });
@@ -160,6 +162,38 @@ export const Register: React.FC = () => {
                 <option value="student">Student</option>
                 <option value="teacher">Teacher</option>
               </select>
+            </div>
+
+            <div>
+              <span className="block text-sm font-medium text-slate-700 mb-2">Gender</span>
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="radio"
+                    name="gender"
+                    value="MALE"
+                    checked={formData.gender === 'MALE'}
+                    onChange={handleChange}
+                    required
+                    className="text-indigo-600 focus:ring-indigo-500"
+                    disabled={loading}
+                  />
+                  <span>Male</span>
+                </label>
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="radio"
+                    name="gender"
+                    value="FEMALE"
+                    checked={formData.gender === 'FEMALE'}
+                    onChange={handleChange}
+                    required
+                    className="text-indigo-600 focus:ring-indigo-500"
+                    disabled={loading}
+                  />
+                  <span>Female</span>
+                </label>
+              </div>
             </div>
 
             <div>

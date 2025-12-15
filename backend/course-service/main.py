@@ -5,7 +5,7 @@ from fastapi import FastAPI, Depends, HTTPException, status, Header, UploadFile,
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, func
 from typing import List, Optional
 import httpx
 import os
@@ -116,10 +116,26 @@ async def get_courses(
 ):
     """Get all published courses (public catalog)"""
     result = await session.execute(
-        select(Course).where(Course.status == "Published")
+        select(Course).where(func.upper(Course.status) == "PUBLISHED")
     )
     courses = result.scalars().all()
     
+    return [course_to_dict(course) for course in courses]
+
+
+@app.get("/courses/teacher/{teacher_id}/public")
+async def get_public_courses_by_teacher(
+    teacher_id: str,
+    session: AsyncSession = Depends(get_session)
+):
+    """Get published courses for a given teacher (public view)."""
+    result = await session.execute(
+        select(Course).where(
+            Course.teacher_id == teacher_id,
+            func.upper(Course.status) == "PUBLISHED"
+        )
+    )
+    courses = result.scalars().all()
     return [course_to_dict(course) for course in courses]
 
 

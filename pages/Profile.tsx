@@ -23,6 +23,7 @@ export const Profile: React.FC = () => {
     phone_number: '',
     country: '',
     bio: '',
+    gender: 'MALE' as 'MALE' | 'FEMALE',
   });
 
   const [originalFormData, setOriginalFormData] = useState(formData);
@@ -44,6 +45,7 @@ export const Profile: React.FC = () => {
         phone_number: userData.phone_number || '',
         country: userData.country || '',
         bio: userData.bio || '',
+        gender: (userData.gender as 'MALE' | 'FEMALE') || 'MALE',
       };
       setFormData(data);
       setOriginalFormData(data);
@@ -148,6 +150,7 @@ export const Profile: React.FC = () => {
         phone_number: formData.phone_number && !formData.phone_number.includes('_') ? formData.phone_number : undefined,
         country: formData.country || undefined,
         bio: formData.bio || undefined,
+        gender: formData.gender,
       };
 
       const updatedUser = await authService.updateProfile(updateData);
@@ -406,6 +409,23 @@ export const Profile: React.FC = () => {
                     onChange={handleInputChange}
                     className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
                   />
+                </div>
+
+                <div>
+                  <label htmlFor="gender" className="block text-sm font-medium text-slate-700 mb-1">
+                    Gender
+                  </label>
+                  <select
+                    id="gender"
+                    name="gender"
+                    value={formData.gender}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-white"
+                    required
+                  >
+                    <option value="MALE">Male</option>
+                    <option value="FEMALE">Female</option>
+                  </select>
                 </div>
               </div>
             </div>

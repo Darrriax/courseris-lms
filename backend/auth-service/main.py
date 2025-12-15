@@ -6,7 +6,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 import bcrypt
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
@@ -15,11 +15,13 @@ import shutil
 from typing import Optional
 from pathlib import Path
 
-from database import get_session, init_db
+from database import get_session, init_db, engine
 from models import User
 import sys
 sys.path.append('/app/shared')
 from shared.models import UserCreate, UserResponse, UserUpdate, Token, TokenData
+from sqlalchemy import text
+from sqlalchemy import select as sa_select
 
 app = FastAPI(title="Auth Service", version="1.0.0")
 
@@ -105,6 +107,20 @@ async def get_current_user(
 async def startup_event():
     """Initialize database on startup"""
     await init_db()
+    await ensure_user_columns()
+
+
+async def ensure_user_columns():
+    """Ensure required columns exist for users table (idempotent)."""
+    async with engine.begin() as conn:
+        # Add age column if missing
+        await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS age INTEGER"))
+        # Add gender column if missing and set default
+        await conn.execute(
+            text("ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(10) DEFAULT 'MALE'")
+        )
+        # Backfill null genders to MALE to satisfy not-null expectation
+        await conn.execute(text("UPDATE users SET gender='MALE' WHERE gender IS NULL"))
 
 
 @app.get("/health")
@@ -119,6 +135,12 @@ async def register(
     session: AsyncSession = Depends(get_session)
 ):
     """Register a new user"""
+    # Validate gender explicitly (defensive check even though Pydantic enforces Literal)
+    if user_data.gender not in {"MALE", "FEMALE"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid gender. Allowed values are MALE or FEMALE."
+        )
     # Check if user already exists
     result = await session.execute(select(User).where(User.email == user_data.email))
     existing_user = result.scalar_one_or_none()
@@ -137,6 +159,7 @@ async def register(
         last_name=user_data.last_name,
         age=user_data.age,
         role=user_data.role,
+        gender=user_data.gender,
         avatar=f"https://picsum.photos/seed/{user_data.email}/100/100"
     )
     
@@ -151,8 +174,10 @@ async def register(
         last_name=new_user.last_name,
         age=new_user.age,
         role=new_user.role,
+        gender=new_user.gender,
         avatar=new_user.avatar,
-        name=new_user.name
+        name=new_user.name,
+        created_at=new_user.created_at
     )
 
 
@@ -209,10 +234,12 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
         country=current_user.country,
         bio=current_user.bio,
         role=current_user.role,
+        gender=current_user.gender,
         avatar=current_user.avatar,
         avatar_url=avatar_url,
         banner_url=banner_url,
-        name=current_user.name
+        name=current_user.name,
+        created_at=current_user.created_at
     )
 
 
@@ -238,6 +265,8 @@ async def update_user_profile(
         current_user.country = user_update.country
     if user_update.bio is not None:
         current_user.bio = user_update.bio
+    if user_update.gender is not None:
+        current_user.gender = user_update.gender
     
     session.add(current_user)
     await session.commit()
@@ -254,10 +283,47 @@ async def update_user_profile(
         country=current_user.country,
         bio=current_user.bio,
         role=current_user.role,
+        gender=current_user.gender,
         avatar=current_user.avatar,
         avatar_url=current_user.avatar_url,
         banner_url=current_user.banner_url,
-        name=current_user.name
+        name=current_user.name,
+        created_at=current_user.created_at
+    )
+
+
+@app.get("/users/{user_id}/public", response_model=UserResponse)
+async def get_public_user(user_id: str, session: AsyncSession = Depends(get_session)):
+    result = await session.execute(sa_select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    base_url = os.getenv("AUTH_SERVICE_BASE_URL", "http://localhost:8001")
+    avatar_url = None
+    if user.avatar_url:
+        avatar_url = f"{base_url}{user.avatar_url}" if user.avatar_url.startswith("/") else user.avatar_url
+    banner_url = None
+    if user.banner_url:
+        banner_url = f"{base_url}{user.banner_url}" if user.banner_url.startswith("/") else user.banner_url
+
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        middle_name=user.middle_name,
+        age=user.age,
+        phone_number=user.phone_number,
+        country=user.country,
+        bio=user.bio,
+        role=user.role,
+        gender=user.gender,
+        avatar=user.avatar,
+        avatar_url=avatar_url,
+        banner_url=banner_url,
+        name=user.name,
+        created_at=user.created_at
     )
 
 
@@ -329,4 +395,33 @@ async def upload_banner(
     # Return full URL for frontend
     base_url = os.getenv("AUTH_SERVICE_BASE_URL", "http://localhost:8001")
     return {"banner_url": f"{base_url}{banner_url}"}
+
+
+@app.get("/analytics/users")
+async def users_analytics(session: AsyncSession = Depends(get_session)):
+    """Return gender distribution and activity stats"""
+    total_result = await session.execute(select(func.count()).select_from(User))
+    total_users = total_result.scalar_one() or 0
+
+    gender_result = await session.execute(
+        select(User.gender, func.count()).group_by(User.gender)
+    )
+    gender_counts_raw = {(g or "").upper(): c for g, c in gender_result}
+    male = gender_counts_raw.get("MALE", 0)
+    female = gender_counts_raw.get("FEMALE", 0)
+
+    # Activity not tracked yet; assume all are active
+    activity = {
+        "active": total_users,
+        "inactive": 0
+    }
+
+    return {
+        "total_users": total_users,
+        "gender": {
+            "male": male,
+            "female": female
+        },
+        "activity": activity
+    }
 
