@@ -3,6 +3,7 @@ import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 const AUTH_SERVICE_URL = import.meta.env.VITE_AUTH_SERVICE_URL || 'http://localhost:8001';
 const COURSE_SERVICE_URL = import.meta.env.VITE_COURSE_SERVICE_URL || 'http://localhost:8002';
 const LEARNING_SERVICE_URL = import.meta.env.VITE_LEARNING_SERVICE_URL || 'http://localhost:8003';
+const PAYMENT_SERVICE_URL = import.meta.env.VITE_PAYMENT_SERVICE_URL || 'http://localhost:8004';
 
 export const authApi: AxiosInstance = axios.create({
   baseURL: AUTH_SERVICE_URL,
@@ -25,6 +26,13 @@ export const learningApi: AxiosInstance = axios.create({
   },
 });
 
+export const paymentApi: AxiosInstance = axios.create({
+  baseURL: PAYMENT_SERVICE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
 // Request interceptor to attach JWT token
 const attachToken = (config: InternalAxiosRequestConfig): InternalAxiosRequestConfig => {
   const token = localStorage.getItem('access_token');
@@ -34,7 +42,7 @@ const attachToken = (config: InternalAxiosRequestConfig): InternalAxiosRequestCo
   return config;
 };
 
-[authApi, courseApi, learningApi].forEach((api) => {
+[authApi, courseApi, learningApi, paymentApi].forEach((api) => {
   api.interceptors.request.use(attachToken, (error) => {
     return Promise.reject(error);
   });

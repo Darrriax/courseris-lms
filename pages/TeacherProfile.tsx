@@ -1,23 +1,28 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { authService, UserResponse } from '../api/auth';
-import { courseApi } from '../api/axios';
+import { courseApi, learningApi } from '../api/axios';
 import { Course } from '../types';
 import { CourseCard } from '../components/CourseCard';
 import { Button } from '../components/Button';
+import { MessageModal } from '../components/MessageModal';
 import { Mail, Phone, Calendar, MessageSquare, User as UserIcon } from 'lucide-react';
 import { getAssetUrl } from '../utils/assetHelpers';
+import { useAuth } from '../context/AuthContext';
 
 type PublicTeacher = UserResponse;
 
 export const TeacherProfile: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [teacher, setTeacher] = useState<PublicTeacher | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [enrolledCourseIds, setEnrolledCourseIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -47,6 +52,23 @@ export const TeacherProfile: React.FC = () => {
     load();
   }, [id]);
 
+  useEffect(() => {
+    const fetchEnrolledCourses = async () => {
+      if (!user || user.role !== 'student') return;
+      try {
+        const resp = await learningApi.get('/enrollments/me');
+        const items = resp.data as any[];
+        const enrolledIds = new Set(
+          items.map((item) => item.course_id || (item.course?.id)).filter(Boolean)
+        );
+        setEnrolledCourseIds(enrolledIds);
+      } catch (err) {
+        console.error('Failed to fetch enrolled courses', err);
+      }
+    };
+    fetchEnrolledCourses();
+  }, [user]);
+
   const memberSince = useMemo(() => {
     if (!teacher?.created_at) return null;
     const date = new Date(teacher.created_at);
@@ -58,7 +80,17 @@ export const TeacherProfile: React.FC = () => {
 
   const handleMessage = () => {
     if (!teacher) return;
-    navigate(`/dashboard?chatWith=${teacher.id}`);
+    setIsMessageModalOpen(true);
+  };
+
+  const handleSendMessage = async (message: string) => {
+    if (!teacher || !id) {
+      throw new Error('Teacher information is missing');
+    }
+    await learningApi.post('/qna/personal', {
+      teacher_id: id,
+      message: message,
+    });
   };
 
   if (loading) {
@@ -131,12 +163,31 @@ export const TeacherProfile: React.FC = () => {
           <p className="text-slate-500 text-sm">No published courses yet.</p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {courses.map((course) => (
-              <CourseCard key={course.id} course={course} variant="catalog" />
-            ))}
+            {courses.map((course) => {
+              const isEnrolled = enrolledCourseIds.has(course.id);
+              return (
+                <CourseCard
+                  key={course.id}
+                  course={course}
+                  variant="catalog"
+                  onClick={isEnrolled ? () => navigate(`/courses/${course.id}`) : undefined}
+                  buttonText={isEnrolled ? 'Continue Learning' : undefined}
+                />
+              );
+            })}
           </div>
         )}
       </div>
+
+      {/* Message Modal */}
+      {teacher && (
+        <MessageModal
+          isOpen={isMessageModalOpen}
+          onClose={() => setIsMessageModalOpen(false)}
+          onSubmit={handleSendMessage}
+          teacherName={`${teacher.first_name} ${teacher.last_name}`}
+        />
+      )}
     </div>
   );
 };

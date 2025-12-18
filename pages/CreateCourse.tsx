@@ -66,6 +66,11 @@ const INITIAL_COURSE_DATA: CourseData = {
   modules: [], // Must be an empty array []
 };
 
+interface CategoryOption {
+  id: string;
+  name: string;
+}
+
 export const CreateCourse: React.FC = () => {
   const navigate = useNavigate();
   const { courseId } = useParams();
@@ -76,8 +81,27 @@ export const CreateCourse: React.FC = () => {
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingCourse, setLoadingCourse] = useState(false);
+  const [categories, setCategories] = useState<CategoryOption[]>([]);
 
   const [courseData, setCourseData] = useState<CourseData>(INITIAL_COURSE_DATA);
+
+  // Fetch categories on mount
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const resp = await courseApi.get('/categories');
+        const cats = resp.data as CategoryOption[];
+        setCategories(cats);
+        // Set default category if none selected
+        if (cats.length > 0 && !courseData.category) {
+          setCourseData((prev) => ({ ...prev, category: cats[0].name }));
+        }
+      } catch (err) {
+        console.error('Failed to fetch categories', err);
+      }
+    };
+    fetchCategories();
+  }, []);
 
   const handleThumbnailUpload = async (file: File) => {
     setError(null);
@@ -97,7 +121,7 @@ export const CreateCourse: React.FC = () => {
     return url;
   };
 
-  const saveCourse = async () => {
+  const saveCourse = async (overrideStatus?: string) => {
     setSaving(true);
     setError(null);
     try {
@@ -109,7 +133,7 @@ export const CreateCourse: React.FC = () => {
         description: courseData.description,
         learning_outcomes: courseData.learning_outcomes,
         thumbnail_url: courseData.thumbnail_url,
-        status: courseData.status,
+        status: overrideStatus || courseData.status,
         modules: (courseData.modules || []).map((m) => ({
           title: m.title,
           lessons: (m.lessons || []).map((l) => ({
@@ -132,6 +156,10 @@ export const CreateCourse: React.FC = () => {
     } finally {
       setSaving(false);
     }
+  };
+
+  const submitForReview = () => {
+    saveCourse('Pending');
   };
 
   useEffect(() => {
@@ -218,6 +246,14 @@ export const CreateCourse: React.FC = () => {
             <Save className="w-4 h-4" />{' '}
             {saving ? 'Saving...' : courseId ? 'Update Course' : 'Save Course'}
           </Button>
+          <Button
+            onClick={submitForReview}
+            className="gap-2 bg-amber-600 hover:bg-amber-700"
+            disabled={saving || !courseData.title.trim()}
+            title="Submit this course for manager approval"
+          >
+            {saving ? 'Submitting...' : 'Submit for Review'}
+          </Button>
         </div>
       </div>
 
@@ -265,6 +301,7 @@ export const CreateCourse: React.FC = () => {
             onThumbnailUpload={handleThumbnailUpload}
             thumbnailPreview={thumbnailPreview}
             saving={saving}
+            categories={categories}
           />
         </div>
         <div className={activeTab === 'curriculum' ? 'block' : 'hidden'}>
@@ -286,12 +323,14 @@ const CourseDetailsForm: React.FC<{
   onThumbnailUpload: (file: File) => Promise<string>;
   thumbnailPreview: string | null;
   saving: boolean;
+  categories: CategoryOption[];
 }> = ({
   courseData,
   setCourseData,
   onThumbnailUpload,
   thumbnailPreview,
   saving,
+  categories,
 }) => {
   const [learningInput, setLearningInput] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -363,10 +402,20 @@ const CourseDetailsForm: React.FC<{
               }
               className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white"
             >
-              <option>Development</option>
-              <option>Design</option>
-              <option>Business</option>
-              <option>Marketing</option>
+              {categories.length > 0 ? (
+                categories.map((cat) => (
+                  <option key={cat.id} value={cat.name}>
+                    {cat.name}
+                  </option>
+                ))
+              ) : (
+                <>
+                  <option>Development</option>
+                  <option>Design</option>
+                  <option>Business</option>
+                  <option>Marketing</option>
+                </>
+              )}
             </select>
           </div>
           <div>
@@ -1059,7 +1108,7 @@ const VideoEditor: React.FC<{
                 <Trash2 className="w-4 h-4" />
                 Delete
               </button>
-            </div>
+          </div>
 
             {/* Upload Progress Overlay */}
             {uploading && (
@@ -1101,15 +1150,15 @@ const VideoEditor: React.FC<{
               <div className="w-full h-full flex items-center justify-center">
                 <div className="text-center">
                   <Video className="w-16 h-16 text-slate-400 mx-auto mb-4" />
-                  <p className="text-sm text-slate-600 mb-2">
-                    Saved Video: {initialContent.fileName}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    Unable to load video preview.
-                  </p>
-                </div>
-              </div>
-            )}
+              <p className="text-sm text-slate-600 mb-2">
+                Saved Video: {initialContent.fileName}
+              </p>
+              <p className="text-xs text-slate-500">
+                Unable to load video preview.
+              </p>
+          </div>
+        </div>
+      )}
           </>
         ) : (
           /* Upload Mode */
@@ -1124,22 +1173,22 @@ const VideoEditor: React.FC<{
               Drag and drop your video file here, or click to browse. Supports
               MP4 format only.
             </p>
-            <input
+              <input
               ref={fileInputRef}
-              type="file"
-              className="hidden"
+                type="file"
+                className="hidden"
               accept="video/mp4"
-              onChange={handleFileChange}
-            />
-            <button
+                onChange={handleFileChange}
+              />
+                <button
               onClick={() => fileInputRef.current?.click()}
               className="px-8 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors"
-            >
+                >
               Select Video File
-            </button>
+                </button>
           </div>
-        )}
-      </div>
+              )}
+            </div>
 
       {/* Video Description */}
       <div className="space-y-2">
@@ -1156,8 +1205,8 @@ const VideoEditor: React.FC<{
             placeholder="Add a description for this video lesson..."
             className="h-[160px] [&_.ql-toolbar]:border-slate-200 [&_.ql-container]:border-slate-200"
           />
-        </div>
-      </div>
+                  </div>
+              </div>
 
       {/* Save Button */}
       <div className="flex justify-end pt-4 border-t border-slate-200">

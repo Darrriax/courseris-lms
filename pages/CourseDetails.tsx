@@ -33,10 +33,14 @@ export const CourseDetails: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isEnrolling, setIsEnrolling] = useState(false);
   const [isEnrolled, setIsEnrolled] = useState(false);
+  const [isLeaving, setIsLeaving] = useState(false);
   const [courseQna, setCourseQna] = useState<CourseQuestion[]>([]);
   const [courseQnaLoading, setCourseQnaLoading] = useState(false);
   const [selectedCourseQnaId, setSelectedCourseQnaId] = useState<string | null>(null);
   const [courseReplyText, setCourseReplyText] = useState('');
+  const [studentsCount, setStudentsCount] = useState<number | null>(null);
+  const [ratingValue, setRatingValue] = useState<number | null>(null);
+  const [ratingsCount, setRatingsCount] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchCourse = async () => {
@@ -66,6 +70,27 @@ export const CourseDetails: React.FC = () => {
     };
     fetchCourse();
   }, [courseId, COURSE_BASE]);
+
+  // Load aggregated metrics (students count + average rating from reviews)
+  useEffect(() => {
+    const fetchMetrics = async () => {
+      if (!courseId) return;
+      try {
+        const resp = await learningApi.get(`/courses/${courseId}/metrics`);
+        const data = resp.data as {
+          students_count: number;
+          rating: number;
+          ratings_count: number;
+        };
+        setStudentsCount(data.students_count);
+        setRatingValue(data.rating);
+        setRatingsCount(data.ratings_count);
+      } catch (err) {
+        console.error('Failed to fetch course metrics', err);
+      }
+    };
+    fetchMetrics();
+  }, [courseId]);
 
   useEffect(() => {
     const checkEnrollment = async () => {
@@ -109,10 +134,36 @@ export const CourseDetails: React.FC = () => {
       .finally(() => setIsEnrolling(false));
   };
 
+  const handleLeaveCourse = async () => {
+    if (!course || !courseId) return;
+    const confirmed = window.confirm(
+      'Are you sure you want to leave this course? Your progress will be erased.'
+    );
+    if (!confirmed) return;
+
+    try {
+      setIsLeaving(true);
+      await learningApi.delete(`/courses/${courseId}/enroll`);
+      setIsEnrolled(false);
+      try {
+        localStorage.removeItem(`course_grades:${courseId}`);
+      } catch {
+        // ignore
+      }
+      alert('You have left the course and your progress has been cleared.');
+    } catch (err) {
+      console.error('Failed to leave course', err);
+      alert('Unable to leave the course right now. Please try again.');
+    } finally {
+      setIsLeaving(false);
+    }
+  };
+
   const isOwner =
     user?.role === 'teacher' && course?.teacher_id
       ? user.id === course.teacher_id
       : false;
+  const isManager = user?.role === 'manager';
 
   useEffect(() => {
     if (!isOwner || !courseId) return;
@@ -172,7 +223,7 @@ export const CourseDetails: React.FC = () => {
   const modules = course?.modules ?? [];
 
   const studentPreviewModules = useMemo(() => {
-    if (isOwner) return modules;
+    if (isOwner || isEnrolled) return modules;
     return modules.map((module, index) => {
       if (index === 0) {
         return {
@@ -182,7 +233,7 @@ export const CourseDetails: React.FC = () => {
       }
       return { ...module, lessons: [] };
     });
-  }, [modules, isOwner]);
+  }, [modules, isOwner, isEnrolled]);
 
   if (loading) {
     return (
@@ -228,7 +279,7 @@ export const CourseDetails: React.FC = () => {
           </div>
         </div>
         
-         <div className="p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
            <div className="flex flex-wrap gap-6 text-sm text-slate-600">
              {course.teacher_id ? (
                <Link
@@ -239,21 +290,25 @@ export const CourseDetails: React.FC = () => {
                   <span className="font-medium text-slate-900">{course.author || 'Instructor'}</span>
                </Link>
              ) : (
-               <div className="flex items-center gap-2">
+             <div className="flex items-center gap-2">
                  {renderAvatar(course.author, course)}
                  <span className="font-medium text-slate-900">{course.author || 'Instructor'}</span>
-               </div>
+             </div>
              )}
              <div className="flex items-center gap-2">
                <Star className="w-5 h-5 text-yellow-400 fill-current" />
-               <span className="font-bold text-slate-900">{course.rating}</span>
+               <span className="font-bold text-slate-900">
+                 {ratingValue !== null ? ratingValue.toFixed(1) : course.rating}
+               </span>
               <span className="text-slate-400">
-                ({course.totalStudents ?? 0} ratings)
+               ({ratingsCount ?? 0} ratings)
               </span>
              </div>
              <div className="flex items-center gap-2">
                <Users className="w-5 h-5 text-slate-400" />
-              <span>{(course.totalStudents ?? 0).toLocaleString()} Students</span>
+              <span>
+                {(studentsCount ?? course.totalStudents ?? 0).toLocaleString()} Students
+              </span>
              </div>
              <div className="flex items-center gap-2">
                <Clock className="w-5 h-5 text-slate-400" />
@@ -265,19 +320,56 @@ export const CourseDetails: React.FC = () => {
               <div className="text-2xl font-bold text-slate-900">
                 {formatPrice(course.price)}
               </div>
-              {!isOwner && (
-                <Button
-                  onClick={handleEnroll}
-                  size="lg"
-                  className="px-8 shadow-lg shadow-indigo-200"
-                  disabled={isEnrolling}
-                >
-                  {isEnrolled
-                    ? 'Continue Learning'
-                    : isEnrolling
-                    ? 'Enrolling...'
-                    : 'Enroll Now'}
-                </Button>
+              {isOwner ? (
+                <div className="flex items-center gap-3">
+                  <Button
+                    onClick={() => navigate(`/course/${course.id}`)}
+                    size="lg"
+                    variant="outline"
+                    className="border-indigo-200 text-indigo-700 hover:bg-indigo-50 flex items-center gap-2"
+                  >
+                    <Eye className="w-4 h-4" />
+                    View course
+                  </Button>
+                </div>
+              ) : isManager ? (
+                <div className="flex items-center gap-3">
+                  <Button
+                    onClick={() => navigate(`/course/${course.id}`)}
+                    size="lg"
+                    variant="outline"
+                    className="border-indigo-200 text-indigo-700 hover:bg-indigo-50 flex items-center gap-2"
+                  >
+                    <Eye className="w-4 h-4" />
+                    View course
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <Button
+                    onClick={handleEnroll}
+                    size="lg"
+                    className="px-8 shadow-lg shadow-indigo-200"
+                    disabled={isEnrolling}
+                  >
+                    {isEnrolled
+                      ? 'Continue Learning'
+                      : isEnrolling
+                      ? 'Enrolling...'
+                      : 'Enroll Now'}
+                  </Button>
+                  {isEnrolled && (
+                    <Button
+                      onClick={handleLeaveCourse}
+                      size="lg"
+                      variant="outline"
+                      className="border-red-200 text-red-600 hover:bg-red-50"
+                      disabled={isLeaving}
+                    >
+                      {isLeaving ? 'Leaving...' : 'Leave Course'}
+              </Button>
+                  )}
+                </div>
               )}
            </div>
         </div>
@@ -329,7 +421,7 @@ export const CourseDetails: React.FC = () => {
             
             <div className="divide-y divide-slate-100">
             {(isOwner ? modules : studentPreviewModules).map((module, index) => {
-              const isOpen = isOwner || index === 0;
+              const isOpen = isOwner || isEnrolled || index === 0;
                 return (
                   <div key={module.id} className="bg-white">
                     <div className="px-6 py-4 bg-slate-50/50 flex items-center justify-between">
@@ -343,6 +435,7 @@ export const CourseDetails: React.FC = () => {
                       {(module.lessons || []).map((lesson, idx) => {
                         const locked =
                           !isOwner &&
+                          !isEnrolled &&
                           (index > 0 || (index === 0 && idx >= 3));
                         const visuals = getLessonVisuals(lesson.type);
                         return (
@@ -366,9 +459,18 @@ export const CourseDetails: React.FC = () => {
                                 {lesson.title}
                               </p>
                             </div>
-                            {locked && (
+                            {locked ? (
                               <span className="text-xs font-medium px-2 py-1 bg-slate-100 text-slate-500 rounded">Locked</span>
-                            )}
+                            ) : isEnrolled && !isOwner ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => navigate(`/course/${course.id}/learn/${lesson.id}`)}
+                                className="text-xs"
+                              >
+                                View
+                              </Button>
+                            ) : null}
                           </div>
                         );
                       })}
@@ -506,8 +608,8 @@ export const CourseDetails: React.FC = () => {
         </section>
       )}
 
-      {/* Reviews carousel (mock data for now) */}
-      <ReviewsCarousel />
+      {/* Reviews carousel */}
+      <ReviewsCarousel courseId={course.id} />
     </div>
   );
 };
@@ -574,43 +676,13 @@ const getLessonVisuals = (type?: string) => {
 
 type Review = {
   id: string;
-  firstName: string;
-  lastName: string;
-  avatar: string;
-  createdAt: string;
+  user_id: string;
+  course_id: string;
   rating: number;
-  text: string;
+  comment: string;
+  student_name?: string | null;
+  created_at: string;
 };
-
-const mockReviews: Review[] = [
-  {
-    id: 'r1',
-    firstName: 'Ava',
-    lastName: 'Smith',
-    avatar: 'https://i.pravatar.cc/80?img=1',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 150).toISOString(),
-    rating: 5,
-    text: 'Clear explanations and practical examples. Loved the pacing.',
-  },
-  {
-    id: 'r2',
-    firstName: 'Liam',
-    lastName: 'Chen',
-    avatar: 'https://i.pravatar.cc/80?img=2',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 320).toISOString(),
-    rating: 4,
-    text: 'Great coverage of fundamentals; would enjoy more quizzes.',
-  },
-  {
-    id: 'r3',
-    firstName: 'Noah',
-    lastName: 'Garcia',
-    avatar: 'https://i.pravatar.cc/80?img=3',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 90).toISOString(),
-    rating: 5,
-    text: 'Excellent structure. The projects helped me retain the material.',
-  },
-];
 
 const monthsBetween = (isoDate: string) => {
   const start = new Date(isoDate);
@@ -621,8 +693,46 @@ const monthsBetween = (isoDate: string) => {
   return Math.max(0, months);
 };
 
-const ReviewsCarousel: React.FC = () => {
-  const reviews = mockReviews;
+const ReviewsCarousel: React.FC<{ courseId: string }> = ({ courseId }) => {
+  const [reviews, setReviews] = React.useState<Review[]>([]);
+  const [loading, setLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    const fetchReviews = async () => {
+      if (!courseId) return;
+      try {
+        setLoading(true);
+        const resp = await learningApi.get(`/courses/${courseId}/reviews`);
+        setReviews(resp.data as Review[]);
+      } catch (err) {
+        console.error('Failed to load reviews', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchReviews();
+  }, [courseId]);
+
+  if (loading && reviews.length === 0) {
+    return (
+      <section className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
+        <h2 className="text-xl font-bold text-slate-900">Student Reviews</h2>
+        <p className="text-sm text-slate-500">Loading reviews...</p>
+      </section>
+    );
+  }
+
+  if (!loading && reviews.length === 0) {
+    return (
+      <section className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-2">
+        <h2 className="text-xl font-bold text-slate-900">Student Reviews</h2>
+        <p className="text-sm text-slate-500">
+          There are no reviews for this course yet.
+        </p>
+      </section>
+    );
+  }
+
   return (
     <section className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
       <div className="flex items-center justify-between">
@@ -638,17 +748,12 @@ const ReviewsCarousel: React.FC = () => {
             className="min-w-[260px] max-w-[280px] bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col gap-3"
           >
             <div className="flex items-center gap-3">
-              <img
-                src={rev.avatar}
-                alt={rev.firstName}
-                className="w-10 h-10 rounded-full object-cover border border-slate-200"
-              />
               <div className="flex flex-col">
                 <span className="text-sm font-semibold text-slate-900">
-                  {rev.firstName} {rev.lastName}
+                  {rev.student_name || 'Student'}
                 </span>
                 <span className="text-xs text-slate-500">
-                  Member for {monthsBetween(rev.createdAt)} months
+                  Member for {monthsBetween(rev.created_at)} months
                 </span>
               </div>
             </div>
@@ -662,7 +767,7 @@ const ReviewsCarousel: React.FC = () => {
                 />
               ))}
             </div>
-            <p className="text-sm text-slate-700 line-clamp-4">{rev.text}</p>
+            <p className="text-sm text-slate-700 line-clamp-4">{rev.comment}</p>
           </div>
         ))}
       </div>

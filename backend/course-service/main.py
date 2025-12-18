@@ -13,9 +13,10 @@ import sys
 import uuid
 import shutil
 
-from database import get_session, init_db
-from models import Course, Module, Lesson
+from database import get_session, init_db, engine
+from models import Course, Module, Lesson, Category
 from schemas import CourseCreate
+from sqlalchemy import text
 
 sys.path.append('/app/shared')
 from shared.models import UserResponse
@@ -102,6 +103,30 @@ def course_to_dict(course: Course) -> dict:
 async def startup_event():
     """Initialize database on startup"""
     await init_db()
+    await seed_default_categories()
+
+
+async def seed_default_categories():
+    """Seed default course categories if they don't exist."""
+    from database import AsyncSessionLocal
+    default_categories = [
+        {"name": "IT", "description": "Information Technology & Computer Science"},
+        {"name": "Management", "description": "Business Management & Leadership"},
+        {"name": "Design", "description": "Graphic Design, UI/UX, and Creative Arts"},
+        {"name": "Marketing", "description": "Digital Marketing & Advertising"},
+        {"name": "Development", "description": "Software & Web Development"},
+        {"name": "Data Science", "description": "Data Analysis, ML, and AI"},
+        {"name": "Business", "description": "Business Strategy & Entrepreneurship"},
+        {"name": "Finance", "description": "Accounting, Investing & Personal Finance"},
+    ]
+    async with AsyncSessionLocal() as session:
+        for cat in default_categories:
+            result = await session.execute(
+                select(Category).where(Category.name == cat["name"])
+            )
+            if not result.scalar_one_or_none():
+                session.add(Category(name=cat["name"], description=cat["description"]))
+        await session.commit()
 
 
 @app.get("/health")
@@ -470,9 +495,21 @@ async def update_course_status(
     if course.teacher_id != user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not own this course")
 
-    new_status = payload.get("status")
-    if new_status not in ["Draft", "Published", "Archived"]:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid status")
+    new_status = (payload.get("status") or "").capitalize()
+
+    # Teachers can move courses between Draft and Pending (request publication),
+    # but only the manager can actually set status to Published.
+    if new_status not in ["Draft", "Pending", "Archived"]:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid status",
+        )
+
+    # Prevent teachers from archiving or unpublishing already published courses directly
+    if new_status == "Archived" or new_status == "Pending":
+        # Allow setting to Pending or Archived only from Draft or Rejected
+        pass
+
     course.status = new_status
     session.add(course)
     await session.commit()
@@ -500,9 +537,15 @@ async def delete_course(
     if course.teacher_id != user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not own this course")
 
-    async with session.begin():
-        await session.delete(course)
+    # Ensure the course is not currently Published; require unpublishing first
+    if (course.status or "").upper() == "PUBLISHED":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete a published course. Please archive or unpublish it first.",
+        )
 
+    await session.delete(course)
+    await session.commit()
     return {"detail": "deleted"}
 
 
@@ -601,3 +644,328 @@ async def upload_video(file: UploadFile = File(...)):
     public_url = f"/uploads/videos/{filename}"
     return {"video_url": public_url, "file_size": file_size}
 
+
+# ============================================================================
+# MANAGER ENDPOINTS
+# ============================================================================
+
+def category_to_dict(cat: Category) -> dict:
+    return {
+        "id": cat.id,
+        "name": cat.name,
+        "description": cat.description,
+        "createdAt": cat.created_at.isoformat() if cat.created_at else None,
+    }
+
+
+@app.get("/categories")
+async def get_categories(session: AsyncSession = Depends(get_session)):
+    """Get all course categories (public)."""
+    result = await session.execute(select(Category).order_by(Category.name))
+    categories = result.scalars().all()
+    return [category_to_dict(c) for c in categories]
+
+
+@app.post("/categories")
+async def create_category(
+    payload: dict,
+    authorization: Optional[str] = Header(None),
+    session: AsyncSession = Depends(get_session)
+):
+    """Create a new category (manager only)."""
+    token = get_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    user = await verify_token(token)
+    if not user or user.role != "manager":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only managers can create categories")
+
+    name = payload.get("name", "").strip()
+    if not name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Category name is required")
+
+    existing = await session.execute(select(Category).where(Category.name == name))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Category already exists")
+
+    cat = Category(name=name, description=payload.get("description"))
+    session.add(cat)
+    await session.commit()
+    await session.refresh(cat)
+    return category_to_dict(cat)
+
+
+@app.put("/categories/{category_id}")
+async def update_category(
+    category_id: str,
+    payload: dict,
+    authorization: Optional[str] = Header(None),
+    session: AsyncSession = Depends(get_session)
+):
+    """Update an existing category (manager only)."""
+    token = get_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    user = await verify_token(token)
+    if not user or user.role != "manager":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only managers can update categories")
+
+    result = await session.execute(select(Category).where(Category.id == category_id))
+    cat = result.scalar_one_or_none()
+    if not cat:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
+
+    if "name" in payload and payload["name"]:
+        cat.name = payload["name"]
+    if "description" in payload:
+        cat.description = payload["description"]
+
+    session.add(cat)
+    await session.commit()
+    await session.refresh(cat)
+    return category_to_dict(cat)
+
+
+@app.delete("/categories/{category_id}")
+async def delete_category(
+    category_id: str,
+    authorization: Optional[str] = Header(None),
+    session: AsyncSession = Depends(get_session)
+):
+    """Delete a category (manager only)."""
+    token = get_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    user = await verify_token(token)
+    if not user or user.role != "manager":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only managers can delete categories")
+
+    result = await session.execute(select(Category).where(Category.id == category_id))
+    cat = result.scalar_one_or_none()
+    if not cat:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
+
+    await session.delete(cat)
+    await session.commit()
+    return {"detail": "deleted"}
+
+
+# ============================================================================
+# COURSE APPROVAL ENDPOINTS (MANAGER)
+# ============================================================================
+
+@app.get("/manager/courses")
+async def get_courses_for_review(
+    authorization: Optional[str] = Header(None),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get all courses pending review (status = Pending) for manager."""
+    token = get_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    user = await verify_token(token)
+    if not user or user.role != "manager":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only managers can access this endpoint")
+
+    # Courses with status "Pending" need review; also include "Draft" if teacher submitted for review
+    result = await session.execute(
+        select(Course).where(func.upper(Course.status) == "PENDING")
+    )
+    courses = result.scalars().all()
+    return [course_to_dict(c) for c in courses]
+
+
+@app.get("/manager/courses/all")
+async def get_all_courses_for_manager(
+    authorization: Optional[str] = Header(None),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get all courses for manager to review (all statuses)."""
+    token = get_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    user = await verify_token(token)
+    if not user or user.role != "manager":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only managers can access this endpoint")
+
+    result = await session.execute(select(Course).order_by(Course.created_at.desc()))
+    courses = result.scalars().all()
+    return [course_to_dict(c) for c in courses]
+
+
+@app.post("/manager/courses/{course_id}/approve")
+async def approve_course(
+    course_id: str,
+    authorization: Optional[str] = Header(None),
+    session: AsyncSession = Depends(get_session)
+):
+    """Approve and publish a course (manager only)."""
+    token = get_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    user = await verify_token(token)
+    if not user or user.role != "manager":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only managers can approve courses")
+
+    result = await session.execute(select(Course).where(Course.id == course_id))
+    course = result.scalar_one_or_none()
+    if not course:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
+
+    course.status = "Published"
+    session.add(course)
+    await session.commit()
+    await session.refresh(course)
+    return course_to_dict(course)
+
+
+@app.post("/manager/courses/{course_id}/reject")
+async def reject_course(
+    course_id: str,
+    payload: dict,
+    authorization: Optional[str] = Header(None),
+    session: AsyncSession = Depends(get_session)
+):
+    """Reject a course (manager only). Optionally provide a reason."""
+    token = get_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    user = await verify_token(token)
+    if not user or user.role != "manager":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only managers can reject courses")
+
+    result = await session.execute(select(Course).where(Course.id == course_id))
+    course = result.scalar_one_or_none()
+    if not course:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
+
+    # Set status back to Draft so teacher can make changes
+    course.status = "Rejected"
+    session.add(course)
+    await session.commit()
+    await session.refresh(course)
+
+    # reason could be stored in a separate table or returned; for now just return
+    return {
+        **course_to_dict(course),
+        "rejection_reason": payload.get("reason", "")
+    }
+
+
+@app.post("/admin/courses/{course_id}/block")
+async def block_course(
+    course_id: str,
+    authorization: Optional[str] = Header(None),
+    session: AsyncSession = Depends(get_session)
+):
+    """Block a course - admin only"""
+    token = get_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    user = await verify_token(token)
+    if not user or user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+
+    result = await session.execute(select(Course).where(Course.id == course_id))
+    course = result.scalar_one_or_none()
+    if not course:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
+
+    await session.execute(
+        text("UPDATE courses SET is_active = FALSE WHERE id = :course_id"),
+        {"course_id": course_id}
+    )
+    await session.commit()
+    return {"message": "Course blocked successfully"}
+
+
+@app.post("/admin/courses/{course_id}/unblock")
+async def unblock_course(
+    course_id: str,
+    authorization: Optional[str] = Header(None),
+    session: AsyncSession = Depends(get_session)
+):
+    """Unblock a course - admin only"""
+    token = get_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    user = await verify_token(token)
+    if not user or user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+
+    result = await session.execute(select(Course).where(Course.id == course_id))
+    course = result.scalar_one_or_none()
+    if not course:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
+
+    await session.execute(
+        text("UPDATE courses SET is_active = TRUE WHERE id = :course_id"),
+        {"course_id": course_id}
+    )
+    await session.commit()
+    return {"message": "Course unblocked successfully"}
+
+
+@app.get("/admin/courses")
+async def get_all_courses_admin(
+    authorization: Optional[str] = Header(None),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get all courses for admin - includes is_active status"""
+    token = get_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    user = await verify_token(token)
+    if not user or user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+
+    result = await session.execute(text("""
+        SELECT c.id,
+               c.title,
+               c.author,
+               c.thumbnail,
+               c.thumbnail_url,
+               c.category,
+               c.price,
+               c.rating,
+               c.total_students,
+               c.duration,
+               c.description,
+               c.level,
+               c.learning_outcomes,
+               c.status,
+               c.created_at,
+               c.teacher_id,
+               c.is_active,
+               CASE WHEN c.is_active = TRUE THEN 'Active' ELSE 'Blocked' END as status_label,
+               u.first_name || ' ' || u.last_name as teacher_name
+        FROM courses c 
+        LEFT JOIN users u ON c.teacher_id = u.id 
+        ORDER BY c.created_at DESC
+    """))
+    
+    courses = result.fetchall()
+    return [
+        {
+            "id": str(course[0]),
+            "title": course[1],
+            "author": course[2],
+            "thumbnail": course[3],
+            "thumbnail_url": course[4],
+            "category": course[5],
+            "price": float(course[6]),
+            "rating": float(course[7]),
+            "total_students": int(course[8]),
+            "duration": course[9],
+            "description": course[10],
+            "level": course[11],
+            "learning_outcomes": course[12],
+            "status": course[13],
+            "created_at": course[14].isoformat() if hasattr(course[14], 'isoformat') else str(course[14]),
+            "teacher_id": str(course[15]) if course[15] else None,
+            "is_active": course[16],
+            "status_label": course[17],
+            "teacher_name": course[18]
+        }
+        for course in courses
+    ]

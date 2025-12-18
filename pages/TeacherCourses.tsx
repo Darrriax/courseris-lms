@@ -38,7 +38,6 @@ export const TeacherCourses: React.FC = () => {
         }));
         setCourses(mapped);
       } catch (err) {
-        // Error handled silently
       } finally {
         setLoading(false);
       }
@@ -55,13 +54,25 @@ export const TeacherCourses: React.FC = () => {
     if (!courseToDelete) return;
 
     try {
-      await courseApi.delete(`/courses/${courseToDelete}`);
-      setCourses((prevCourses) =>
-        prevCourses.filter((course) => course.id !== courseToDelete)
-      );
-      setCourseToDelete(null);
-    } catch (error) {
-      alert('Failed to delete course. Please try again.');
+      const response = await courseApi.delete(`/courses/${courseToDelete}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        }
+      });
+      
+      if (response.status === 200 || response.status === 204) {
+        setCourses((prevCourses) =>
+          prevCourses.filter((course) => course.id !== courseToDelete)
+        );
+        setCourseToDelete(null);
+      } else {
+        throw new Error('Failed to delete course');
+      }
+    } catch (error: any) {
+      console.error('Delete error:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to delete course. Please try again.';
+      alert(errorMessage);
     }
   };
 
@@ -69,8 +80,7 @@ export const TeacherCourses: React.FC = () => {
     setCourseToDelete(null);
   };
 
-
-  const handleStatus = async (id: string, status: 'Published' | 'Draft') => {
+  const handleStatus = async (id: string, status: 'pending' | 'draft' | 'published') => {
     try {
       const resp = await courseApi.patch(`/courses/${id}/status`, { status });
       const updated = resp.data;
@@ -78,8 +88,9 @@ export const TeacherCourses: React.FC = () => {
         prev.map((c) => (c.id === id ? { ...c, status: updated.status } : c))
       );
       setOpenMenu(null);
-    } catch (error) {
-      alert('Failed to update course status. Please try again.');
+    } catch (error: any) {
+      const detail = (error?.response?.data?.detail as string) || 'Failed to update course status. Please try again.';
+      alert(detail);
     }
   };
 
@@ -184,7 +195,7 @@ export const TeacherCourses: React.FC = () => {
 const TeacherCourseRow: React.FC<{
   course: Course;
   onDelete: (id: string) => void;
-  onStatus: (id: string, status: 'Published' | 'Draft') => void;
+  onStatus: (id: string, status: 'pending' | 'draft' | 'published') => void;
   onOpen: (id: string) => void;
   onEdit: (id: string) => void;
   isMenuOpen: boolean;
@@ -200,7 +211,24 @@ const TeacherCourseRow: React.FC<{
 }) => {
   const statusNormalized = (course.status || '').toUpperCase();
   const isPublished = statusNormalized === 'PUBLISHED';
+  const isPending = statusNormalized === 'PENDING';
+  const isRejected = statusNormalized === 'REJECTED';
+  const isDraft = !isPublished && !isPending && !isRejected;
   const created = formatDate(course.createdAt);
+
+  const getStatusStyle = () => {
+    if (isPublished) return 'bg-green-50 text-green-700 border-green-200';
+    if (isPending) return 'bg-amber-50 text-amber-700 border-amber-200';
+    if (isRejected) return 'bg-red-50 text-red-700 border-red-200';
+    return 'bg-slate-100 text-slate-600 border-slate-200';
+  };
+
+  const getStatusLabel = () => {
+    if (isPublished) return 'Published';
+    if (isPending) return 'Pending Review';
+    if (isRejected) return 'Rejected';
+    return 'Draft';
+  };
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-10 gap-4 p-4 items-center hover:bg-slate-50 transition-colors group">
@@ -222,13 +250,9 @@ const TeacherCourseRow: React.FC<{
             {course.title}
           </h3>
             <span
-              className={`text-[10px] px-2 py-0.5 rounded-full font-semibold tracking-wide uppercase border ${
-                isPublished
-                  ? 'bg-green-50 text-green-700 border-green-200'
-                  : 'bg-slate-100 text-slate-600 border-slate-200'
-              }`}
+              className={`text-[10px] px-2 py-0.5 rounded-full font-semibold tracking-wide uppercase border ${getStatusStyle()}`}
             >
-              {isPublished ? 'Published' : 'Draft'}
+              {getStatusLabel()}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -263,35 +287,64 @@ const TeacherCourseRow: React.FC<{
           </button>
           {isMenuOpen && (
             <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
-              {isPublished ? (
+              {isDraft && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    onStatus(course.id, 'Draft');
+                    onStatus(course.id, 'pending');
                   }}
                   className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 text-amber-700"
                 >
-                  Unpublish (Draft)
+                  Request Publication
                 </button>
-              ) : (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onStatus(course.id, 'Published');
-                }}
-                className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 text-green-600"
-              >
-                Publish
-              </button>
+              )}
+              {isRejected && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onStatus(course.id, 'pending');
+                  }}
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 text-amber-700"
+                >
+                  Resubmit for Review
+                </button>
+              )}
+              {isPublished && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (window.confirm('Are you sure you want to unpublish this course? It will no longer be visible to students.')) {
+                      onStatus(course.id, 'draft');
+                    }
+                  }}
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 text-slate-700"
+                >
+                  Unpublish
+                </button>
+              )}
+              {isPending && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (window.confirm('Are you sure you want to move this course back to draft? The review request will be cancelled.')) {
+                      onStatus(course.id, 'draft');
+                    }
+                  }}
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 text-slate-700"
+                >
+                  Cancel Review Request
+                </button>
               )}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  onDelete(course.id);
+                  if (window.confirm('Are you sure you want to delete this course? This action cannot be undone.')) {
+                    onDelete(course.id);
+                  }
                 }}
                 className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
               >
-                Delete
+                Delete Course
               </button>
             </div>
           )}
@@ -311,6 +364,8 @@ const normalizeStatus = (value?: string) => {
   const upper = (value || '').toUpperCase();
   if (upper === 'PUBLISHED') return 'Published';
   if (upper === 'ARCHIVED') return 'Archived';
+  if (upper === 'PENDING') return 'Pending';
+  if (upper === 'REJECTED') return 'Rejected';
   return 'Draft';
 };
 

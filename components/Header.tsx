@@ -37,7 +37,7 @@ export const Header: React.FC = () => {
         
         <div className="flex items-center space-x-3 pl-4 border-l border-slate-200">
           <div className="flex flex-col text-right hidden sm:block">
-            <span className="text-sm font-medium text-slate-900 leading-none">{user.name}</span>
+            <span className="text-sm font-medium text-slate-900 leading-none">{user.name} </span>
             <span className="text-xs text-slate-500 mt-1 capitalize">{user.role}</span>
           </div>
           <img

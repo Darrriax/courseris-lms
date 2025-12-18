@@ -79,6 +79,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-courseris}:${POSTGRES_PASSWORD:-courseris123}@db:5432/${POSTGRES_DB:-courseris}
       AUTH_SERVICE_URL: http://auth_service:8000
       COURSE_SERVICE_URL: http://course_service:8000
+      PAYMENT_SERVICE_URL: http://payment_service:8000
     ports:
       - "8003:8000"
     depends_on:
@@ -94,6 +95,32 @@ services:
       - ./backend/learning-service:/app
       - ./backend/shared:/app/shared
 
+  # Payment Service
+  payment_service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: payment-service
+    container_name: courseris-payment-service
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-courseris}:${POSTGRES_PASSWORD:-courseris123}@db:5432/${POSTGRES_DB:-courseris}
+      AUTH_SERVICE_URL: http://auth_service:8000
+      COURSE_SERVICE_URL: http://course_service:8000
+    ports:
+      - "8004:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      auth_service:
+        condition: service_started
+      course_service:
+        condition: service_started
+    networks:
+      - courseris-network
+    volumes:
+      - ./backend/payment-service:/app
+      - ./backend/shared:/app/shared
+
   # Frontend Service
   frontend:
     build:
@@ -104,6 +131,7 @@ services:
       VITE_AUTH_SERVICE_URL: http://localhost:8001
       VITE_COURSE_SERVICE_URL: http://localhost:8002
       VITE_LEARNING_SERVICE_URL: http://localhost:8003
+      VITE_PAYMENT_SERVICE_URL: http://localhost:8004
     ports:
       - "3000:3000"
     depends_on:

@@ -3,7 +3,7 @@ export interface User {
   name: string;
   avatar: string;
   email: string;
-  role: 'student' | 'teacher';
+  role: 'student' | 'teacher' | 'manager';
   gender?: 'MALE' | 'FEMALE';
   created_at?: string;
 }
@@ -38,7 +38,7 @@ export interface Course {
   progress?: number; // 0-100 if enrolled
   modules?: Module[]; // For player view
   description?: string;
-  status?: 'Published' | 'Draft' | 'Archived';
+  status?: 'Published' | 'Draft' | 'Archived' | 'Pending' | 'Rejected';
   createdAt?: string;
   teacher_id?: string;
 }
@@ -63,4 +63,32 @@ export interface CourseQuestion {
   status: 'open' | 'answered';
   created_at?: string;
   replied_at?: string | null;
+}
+
+export interface Certificate {
+  id: string;
+  user_id: string;
+  course_id: string;
+  course_title: string;
+  score_pct: number;
+  issued_at: string;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt?: string;
+}
+
+export interface ManagerMessage {
+  id: string;
+  teacher_id: string;
+  teacher_name?: string;
+  subject: string;
+  message: string;
+  reply?: string;
+  status: 'open' | 'answered';
+  created_at?: string;
+  replied_at?: string;
 }

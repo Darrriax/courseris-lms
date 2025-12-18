@@ -8,6 +8,17 @@ import uuid
 from sqlalchemy import Column, JSON
 
 
+class Category(SQLModel, table=True):
+    """Course categories managed by manager."""
+
+    __tablename__ = "categories"
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    name: str = Field(unique=True, index=True)
+    description: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class Lesson(SQLModel, table=True):
     __tablename__ = "lessons"
     

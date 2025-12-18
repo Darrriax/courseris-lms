@@ -14,13 +14,15 @@ DATABASE_URL = os.getenv(
 
 engine = create_async_engine(DATABASE_URL, echo=True, future=True)
 
+# Session factory for use outside of FastAPI dependency injection
+AsyncSessionLocal = sessionmaker(
+    engine, class_=AsyncSession, expire_on_commit=False
+)
+
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """Dependency for getting async database session"""
-    async_session = sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False
-    )
-    async with async_session() as session:
+    async with AsyncSessionLocal() as session:
         yield session
 
 

@@ -11,7 +11,9 @@ class UserBase(BaseModel):
     first_name: str
     last_name: str
     age: Optional[int] = None
-    role: Literal["student", "teacher"]
+    phone_number: Optional[str] = None
+    country: Optional[str] = None
+    role: Literal["student", "teacher", "manager", "admin"]
     gender: Literal["MALE", "FEMALE"]
 
 
@@ -40,7 +42,7 @@ class UserResponse(BaseModel):
     phone_number: Optional[str] = None
     country: Optional[str] = None
     bio: Optional[str] = None
-    role: Literal["student", "teacher"]
+    role: Literal["student", "teacher", "manager", "admin"]
     gender: Literal["MALE", "FEMALE"]
     avatar: Optional[str] = None  # Legacy field
     avatar_url: Optional[str] = None

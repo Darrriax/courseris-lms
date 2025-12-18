@@ -14,7 +14,12 @@ export const Login: React.FC = () => {
   // Redirect if already logged in
   React.useEffect(() => {
     if (user) {
-      navigate('/dashboard', { replace: true });
+      // Redirect admin users to admin dashboard, others to regular dashboard
+      if (user.role === 'admin') {
+        navigate('/admin', { replace: true });
+      } else {
+        navigate('/dashboard', { replace: true });
+      }
     }
   }, [user, navigate]);
 
@@ -25,7 +30,18 @@ export const Login: React.FC = () => {
 
     try {
       await login({ email, password });
-      navigate('/dashboard', { replace: true });
+      // Redirect based on user role after successful login
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        const userData = JSON.parse(userStr);
+        if (userData.role === 'admin') {
+          navigate('/admin', { replace: true });
+        } else {
+          navigate('/dashboard', { replace: true });
+        }
+      } else {
+        navigate('/dashboard', { replace: true });
+      }
     } catch (err: any) {
       setError(err.message || 'Login failed. Please try again.');
     } finally {

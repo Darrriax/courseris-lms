@@ -2,16 +2,36 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Filter, ChevronDown } from 'lucide-react';
 import { CourseCard } from '../components/CourseCard';
 import { Button } from '../components/Button';
-import { courseApi } from '../api/axios';
+import { courseApi, learningApi } from '../api/axios';
 import { Course } from '../types';
+import { useAuth } from '../context/AuthContext';
 
 export const Catalog: React.FC = () => {
+  const { user } = useAuth();
   const COURSE_BASE =
     import.meta.env.VITE_COURSE_SERVICE_URL || 'http://localhost:8002';
   const [activeCategory, setActiveCategory] = useState('All');
   const [courses, setCourses] = useState<Course[]>([]);
+  const [enrolledCourseIds, setEnrolledCourseIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchEnrolledCourses = async () => {
+      if (!user || user.role !== 'student') return;
+      try {
+        const resp = await learningApi.get('/enrollments/me');
+        const items = resp.data as any[];
+        const enrolledIds = new Set(
+          items.map((item) => item.course_id || (item.course?.id)).filter(Boolean)
+        );
+        setEnrolledCourseIds(enrolledIds);
+      } catch (err) {
+        console.error('Failed to fetch enrolled courses', err);
+      }
+    };
+    fetchEnrolledCourses();
+  }, [user]);
 
   useEffect(() => {
     const fetchCourses = async () => {
@@ -54,11 +74,19 @@ export const Catalog: React.FC = () => {
   }, [courses]);
 
   const filteredCourses = useMemo(
-    () =>
-      activeCategory === 'All'
+    () => {
+      let filtered = activeCategory === 'All'
         ? courses
-        : courses.filter((c) => c.category === activeCategory),
-    [activeCategory, courses]
+        : courses.filter((c) => c.category === activeCategory);
+      
+      // Filter out enrolled courses for students
+      if (user?.role === 'student' && enrolledCourseIds.size > 0) {
+        filtered = filtered.filter((c) => !enrolledCourseIds.has(c.id));
+      }
+      
+      return filtered;
+    },
+    [activeCategory, courses, enrolledCourseIds, user]
   );
 
   return (

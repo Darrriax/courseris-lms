@@ -108,6 +108,7 @@ async def startup_event():
     """Initialize database on startup"""
     await init_db()
     await ensure_user_columns()
+    await seed_manager_user()
 
 
 async def ensure_user_columns():
@@ -121,6 +122,27 @@ async def ensure_user_columns():
         )
         # Backfill null genders to MALE to satisfy not-null expectation
         await conn.execute(text("UPDATE users SET gender='MALE' WHERE gender IS NULL"))
+
+
+async def seed_manager_user():
+    """Create the default manager user if it doesn't exist."""
+    from database import AsyncSessionLocal
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(select(User).where(User.email == "manager@gmail.com"))
+        existing = result.scalar_one_or_none()
+        if not existing:
+            manager = User(
+                email="manager@gmail.com",
+                password_hash=get_password_hash("123456"),
+                first_name="Course",
+                last_name="Manager",
+                role="manager",
+                gender="MALE",
+                avatar="https://picsum.photos/seed/manager/100/100"
+            )
+            session.add(manager)
+            await session.commit()
+            print("✓ Manager user seeded: manager@gmail.com / 123456")
 
 
 @app.get("/health")
@@ -399,12 +421,15 @@ async def upload_banner(
 
 @app.get("/analytics/users")
 async def users_analytics(session: AsyncSession = Depends(get_session)):
-    """Return gender distribution and activity stats"""
+    """Return user analytics: gender, activity, roles, and geo distribution."""
     total_result = await session.execute(select(func.count()).select_from(User))
     total_users = total_result.scalar_one() or 0
 
+    # Gender distribution - exclude managers and admins
     gender_result = await session.execute(
-        select(User.gender, func.count()).group_by(User.gender)
+        select(User.gender, func.count())
+        .where(User.role.in_(["student", "teacher"]))
+        .group_by(User.gender)
     )
     gender_counts_raw = {(g or "").upper(): c for g, c in gender_result}
     male = gender_counts_raw.get("MALE", 0)
@@ -413,15 +438,255 @@ async def users_analytics(session: AsyncSession = Depends(get_session)):
     # Activity not tracked yet; assume all are active
     activity = {
         "active": total_users,
-        "inactive": 0
+        "inactive": 0,
     }
+
+    # Role distribution (student vs teacher vs manager vs admin)
+    role_result = await session.execute(
+        select(User.role, func.count()).group_by(User.role)
+    )
+    role_counts_raw = {(r or "").upper(): c for r, c in role_result}
+    students = role_counts_raw.get("STUDENT", 0)
+    teachers = role_counts_raw.get("TEACHER", 0)
+    managers = role_counts_raw.get("MANAGER", 0)
+    admins = role_counts_raw.get("ADMIN", 0)
+
+    # Country distribution
+    country_result = await session.execute(
+        select(User.country, func.count()).group_by(User.country)
+    )
+    countries = [
+        {"country": (country or "Unknown"), "count": count}
+        for country, count in country_result
+    ]
 
     return {
         "total_users": total_users,
         "gender": {
             "male": male,
-            "female": female
+            "female": female,
         },
-        "activity": activity
+        "activity": activity,
+        "roles": {
+            "student": students,
+            "teacher": teachers,
+            "manager": managers,
+            "admin": admins,
+        },
+        "countries": countries,
     }
+
+
+# Admin endpoints
+@app.get("/admin/users")
+async def get_all_users(
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Get all users - admin only"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    result = await session.execute(select(User))
+    users = result.scalars().all()
+    
+    return [
+        {
+            "id": user.id,
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "role": user.role,
+            "created_at": user.created_at,
+            "is_active": True
+        }
+        for user in users
+    ]
+
+
+@app.get("/admin/permissions")
+async def get_all_permissions(
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Get all permissions - admin only"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    permissions = await session.execute(text("SELECT * FROM permissions"))
+    return permissions.fetchall()
+
+
+@app.get("/admin/users/{user_id}/permissions")
+async def get_user_permissions(
+    user_id: str,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Get permissions for a specific user - admin only"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    permissions = await session.execute(
+        text("""
+            SELECT p.* FROM permissions p
+            JOIN user_permissions up ON p.id = up.permission_id
+            WHERE up.user_id = :user_id
+        """),
+        {"user_id": user_id}
+    )
+    return permissions.fetchall()
+
+
+@app.post("/admin/users/{user_id}/permissions/{permission_id}")
+async def grant_permission(
+    user_id: str,
+    permission_id: str,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Grant permission to user - admin only"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    try:
+        await session.execute(
+            text("""
+                INSERT INTO user_permissions (user_id, permission_id)
+                VALUES (:user_id, :permission_id)
+                ON CONFLICT (user_id, permission_id) DO NOTHING
+            """),
+            {"user_id": user_id, "permission_id": permission_id}
+        )
+        await session.commit()
+        return {"message": "Permission granted successfully"}
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/admin/users/{user_id}/permissions/{permission_id}")
+async def revoke_permission(
+    user_id: str,
+    permission_id: str,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Revoke permission from user - admin only"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    try:
+        await session.execute(
+            text("""
+                DELETE FROM user_permissions 
+                WHERE user_id = :user_id AND permission_id = :permission_id
+            """),
+            {"user_id": user_id, "permission_id": permission_id}
+        )
+        await session.commit()
+        return {"message": "Permission revoked successfully"}
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/admin/users/{user_id}/block")
+async def block_user(
+    user_id: str,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Block a user - admin only"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    try:
+        await session.execute(
+            text("UPDATE users SET is_active = FALSE WHERE id = :user_id"),
+            {"user_id": user_id}
+        )
+        await session.commit()
+        return {"message": "User blocked successfully"}
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/admin/users/{user_id}/unblock")
+async def unblock_user(
+    user_id: str,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Unblock a user - admin only"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    try:
+        await session.execute(
+            text("UPDATE users SET is_active = TRUE WHERE id = :user_id"),
+            {"user_id": user_id}
+        )
+        await session.commit()
+        return {"message": "User unblocked successfully"}
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/admin/create-manager")
+async def create_manager(
+    user_data: dict,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Create a new manager - admin only"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    try:
+        # Check if email already exists
+        existing_user = await session.execute(
+            select(User).where(User.email == user_data["email"])
+        )
+        if existing_user.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="Email already exists")
+        
+        # Hash password
+        password_hash = bcrypt.hashpw(user_data["password"].encode('utf-8'), bcrypt.gensalt())
+        
+        # Create new manager
+        new_user = User(
+            email=user_data["email"],
+            password_hash=password_hash.decode('utf-8'),
+            first_name=user_data["first_name"],
+            last_name=user_data["last_name"],
+            role="manager",
+            gender=user_data.get("gender", "MALE"),
+            age=user_data.get("age"),
+            phone_number=user_data.get("phone_number"),
+            country=user_data.get("country"),
+            bio=user_data.get("bio")
+        )
+        
+        session.add(new_user)
+        await session.commit()
+        await session.refresh(new_user)
+        
+        return {
+            "message": "Manager created successfully",
+            "user": {
+                "id": new_user.id,
+                "email": new_user.email,
+                "first_name": new_user.first_name,
+                "last_name": new_user.last_name,
+                "role": new_user.role
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
 

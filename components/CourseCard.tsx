@@ -10,6 +10,9 @@ interface CourseCardProps {
   variant?: 'catalog' | 'progress' | 'teacher';
   disableNavigation?: boolean;
   hideAuthor?: boolean;
+  onClick?: () => void;
+  buttonText?: string;
+  buttonOnClick?: () => void;
 }
 
 export const CourseCard: React.FC<CourseCardProps> = ({
@@ -17,11 +20,18 @@ export const CourseCard: React.FC<CourseCardProps> = ({
   variant = 'catalog',
   disableNavigation = false,
   hideAuthor = false,
+  onClick,
+  buttonText,
+  buttonOnClick,
 }) => {
   const navigate = useNavigate();
 
   const handleStart = () => {
     if (disableNavigation) return;
+    if (onClick) {
+      onClick();
+      return;
+    }
     if (variant === 'catalog' || variant === 'teacher') {
       navigate(`/courses/${course.id}`);
     } else {
@@ -88,13 +98,19 @@ export const CourseCard: React.FC<CourseCardProps> = ({
               <Button
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleStart();
+                  if (buttonOnClick) {
+                    buttonOnClick();
+                  } else {
+                    handleStart();
+                  }
                 }}
                 fullWidth
-                variant="outline"
-                className="group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-600"
+                variant={buttonText === 'Continue Learning' ? 'primary' : 'outline'}
+                className={buttonText === 'Continue Learning' 
+                  ? 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-600'
+                  : 'group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-600'}
               >
-                Enroll Now
+                {buttonText || 'Enroll Now'}
               </Button>
             </div>
           </>
