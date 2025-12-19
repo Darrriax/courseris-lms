@@ -157,6 +157,7 @@ async def register(
     session: AsyncSession = Depends(get_session)
 ):
     """Register a new user"""
+    normalized_email = user_data.email.lower().strip()
     # Validate gender explicitly (defensive check even though Pydantic enforces Literal)
     if user_data.gender not in {"MALE", "FEMALE"}:
         raise HTTPException(
@@ -164,7 +165,7 @@ async def register(
             detail="Invalid gender. Allowed values are MALE or FEMALE."
         )
     # Check if user already exists
-    result = await session.execute(select(User).where(User.email == user_data.email))
+    result = await session.execute(select(User).where(User.email == normalized_email))
     existing_user = result.scalar_one_or_none()
     if existing_user:
         raise HTTPException(
@@ -175,7 +176,7 @@ async def register(
     # Create new user
     hashed_password = get_password_hash(user_data.password)
     new_user = User(
-        email=user_data.email,
+        email=normalized_email,
         password_hash=hashed_password,
         first_name=user_data.first_name,
         last_name=user_data.last_name,
@@ -209,8 +210,12 @@ async def login(
     session: AsyncSession = Depends(get_session)
 ):
     """Login and get access token"""
+    normalized_email = credentials.username.lower().strip()
+
     # Find user by email (OAuth2PasswordRequestForm uses username field for email)
-    result = await session.execute(select(User).where(User.email == form_data.username))
+    result = await session.execute(
+        select(User).where(User.email == normalized_email)
+    )
     user = result.scalar_one_or_none()
     
     if not user or not verify_password(form_data.password, user.password_hash):
