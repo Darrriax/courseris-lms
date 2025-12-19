@@ -1,129 +1,126 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Courseris - Онлайн-платформа для навчання
 
-# Courseris - Online Learning Platform
+Courseris - це комплексна онлайн-платформа для навчання, створена з використанням React для фронтенду та Python мікросервісів для бекенду. Платформа дозволяє викладачам створювати та керувати курсами, студентам записуватися та навчатися, а адміністраторам - контролювати всю систему.
 
-Courseris is a comprehensive online learning platform built with React frontend and Python microservices backend. This platform allows teachers to create and manage courses, students to enroll and learn, and administrators to oversee the entire system.
+## 🚀 Швидкий початок
 
-## 🚀 Quick Start
+### Необхідні умови
 
-### Prerequisites
-
-- Node.js (v18 or higher)
-- Python (v3.9 or higher)
-- Docker and Docker Compose
+- Node.js (v18 або вище)
+- Python (v3.9 або вище)
+- Docker та Docker Compose
 - Git
 
-### Installation
+### Встановлення
 
-1. **Clone repository**
+1. **Клонувати репозиторій**
    ```bash
    git clone <repository-url>
    cd courseris
    ```
 
-2. **Install frontend dependencies**
+2. **Встановити залежності фронтенду**
    ```bash
    npm install
    ```
 
-3. **Install backend dependencies**
+3. **Встановити залежності бекенду**
    ```bash
    cd backend
    pip install -r shared/requirements.txt
    ```
 
-4. **Set up environment variables**
+4. **Налаштувати змінні середовища**
    ```bash
    cp .env.template .env
-   # Edit .env file with your configuration
+   # Відредагуйте файл .env з вашою конфігурацією
    ```
 
-## 🏃‍♂️ Running the Application
+## 🏃‍♂️ Запуск додатку
 
-### Option 1: Using Docker (Recommended)
+### Варіант 1: Використання Docker (Рекомендовано)
 
-1. **Start all services with Docker Compose**
+1. **Запустити всі сервіси за допомогою Docker Compose**
    ```bash
    docker-compose up -d
    ```
 
-2. **Access the application**
-   - Frontend: http://localhost:3001
+2. **Доступ до додатку**
+   - Фронтенд: http://localhost:3001
    - API Gateway: http://localhost:8000
    - Auth Service: http://localhost:8001
    - Course Service: http://localhost:8002
    - Learning Service: http://localhost:8003
+   - Payment Service: http://localhost:8004
 
-### Option 2: Manual Setup
+### Варіант 2: Ручне налаштування
 
-1. **Start backend services**
+1. **Запустити бекенд сервіси**
    ```bash
-   # Terminal 1 - Auth Service
+   # Термінал 1 - Auth Service
    cd backend/auth-service
    python main.py
 
-   # Terminal 2 - Course Service
+   # Термінал 2 - Course Service
    cd backend/course-service
    python main.py
 
-   # Terminal 3 - Learning Service
+   # Термінал 3 - Learning Service
    cd backend/learning-service
    python main.py
    ```
 
-2. **Start frontend**
+2. **Запустити фронтенд**
    ```bash
-   # Terminal 4 - Frontend
+   # Термінал 4 - Frontend
    npm run dev
    ```
 
-## 📁 Project Structure
+## 📁 Структура проєкту
 
 ```
 courseris/
-├── api/                    # API configurations
-├── backend/                # Python microservices
-│   ├── auth-service/       # Authentication service
-│   ├── course-service/     # Course management service
-│   ├── learning-service/   # Learning progress service
-│   └── shared/            # Shared models and utilities
-├── components/            # React components
-├── pages/                 # React page components
-│   ├── admin/            # Admin panel pages
+├── api/                    # API конфігурації
+├── backend/                # Python мікросервіси
+│   ├── auth-service/       # Сервіс автентифікації
+│   ├── course-service/     # Сервіс управління курсами
+│   ├── learning-service/   # Сервіс прогресу навчання
+│   └── shared/            # Спільні моделі та утиліти
+├── components/            # React компоненти
+├── pages/                 # React компоненти сторінок
+│   ├── admin/            # Сторінки адміністративної панелі
 │   └── ...
-├── utils/                # Utility functions
-├── constants/            # Application constants
-├── context/              # React contexts
-├── App.tsx              # Main application component
-├── index.html           # HTML template
-├── package.json         # Frontend dependencies
-├── docker-compose.yml   # Docker configuration
-└── .env                # Environment variables
+├── utils/                # Утилітарні функції
+├── constants/            # Константи додатку
+├── context/              # React контексти
+├── App.tsx              # Головний компонент додатку
+├── index.html           # HTML шаблон
+├── package.json         # Залежності фронтенду
+├── docker-compose.yml   # Конфігурація Docker
+└── .env                # Змінні середовища
 ```
 
-## 🔧 Configuration
+## 🔧 Конфігурація
 
-### Environment Variables
+### Змінні середовища
 
-Create a `.env` file in root directory:
+Створіть файл `.env` в кореневій директорії:
 
 ```env
-# Frontend Configuration
+# Конфігурація фронтенду
 VITE_API_BASE_URL=http://localhost:8000
 VITE_COURSE_SERVICE_URL=http://localhost:8002
 VITE_AUTH_SERVICE_URL=http://localhost:8001
 
-# Backend Configuration
+# Конфігурація бекенду
 DATABASE_URL=postgresql://user:password@localhost:5432/courseris
-JWT_SECRET_KEY=your-secret-key
+JWT_SECRET_KEY=**Запитайте в мене**
 REDIS_URL=redis://localhost:6379
 ```
 
-### Database Setup
+### Налаштування бази даних
 
-1. **Install PostgreSQL**
+1. **Встановити PostgreSQL**
    ```bash
    # macOS
    brew install postgresql
@@ -132,117 +129,74 @@ REDIS_URL=redis://localhost:6379
    sudo apt-get install postgresql postgresql-contrib
    ```
 
-2. **Create database**
+2. **Створити базу даних**
    ```sql
    CREATE DATABASE courseris;
    CREATE USER courseris_user WITH PASSWORD 'your_password';
    GRANT ALL PRIVILEGES ON DATABASE courseris TO courseris_user;
    ```
 
-3. **Run migrations**
+3. **Запустити міграції**
    ```bash
    cd backend/shared
    python database.py
    ```
 
-## 🎯 Features
+## 🎯 Функціонал
 
-### For Teachers
-- Create and manage courses
-- Upload course materials and thumbnails
-- Track student progress
-- Manage course status (draft, published, etc.)
+### Для викладачів
+- Створення та управління курсами
+- Завантаження матеріалів курсів та мініатюр
+- Відстеження прогресу студентів
+- Управління статусом курсу (чернетка, опубліковано тощо)
 
-### For Students
-- Browse and enroll in courses
-- Track learning progress
-- View course content
-- Receive certificates
+### Для студентів
+- Перегляд та запис на курси
+- Відстеження прогресу навчання
+- Перегляд матеріалів курсу
+- Отримання сертифікатів
 
-### For Administrators
-- Manage all courses and users
-- Review and approve courses
-- Monitor platform activity
-- User management
+### Для адміністраторів
+- Управління всіма курсами та користувачами
+- Перевірка та затвердження курсів
+- Моніторинг активності платформи
+- Управління користувачами
 
-## 🛠️ Development
+## 🛠️ Розробка
 
-### Frontend Development
+### Розробка фронтенду
 
-The frontend is built with:
-- React 18 with TypeScript
-- Vite for bundling
-- Tailwind CSS for styling
-- React Router for navigation
-- Axios for API calls
+Фронтенд побудований з використанням:
+- React 18 з TypeScript
+- Vite для бандлінгу
+- Tailwind CSS для стилізації
+- React Router для навігації
+- Axios для API викликів
 
-### Backend Development
+### Розробка бекенду
 
-The backend consists of Python microservices:
-- FastAPI for REST APIs
-- SQLAlchemy for database ORM
-- JWT for authentication
-- PostgreSQL for data storage
+Бекенд складається з Python мікросервісів:
+- FastAPI для REST API
+- SQLAlchemy для бази даних ORM
+- JWT для автентифікації
+- PostgreSQL для зберігання даних
 
-### Common Development Commands
 
-```bash
-# Frontend
-npm run dev          # Start development server
-npm run build        # Build for production
-npm run preview      # Preview production build
+## 🐳 Docker сервіси
 
-# Backend
-python -m pytest    # Run tests
-python -m flake8    # Code linting
-```
-
-## 🐳 Docker Services
-
-The application includes the following Docker services:
+Додаток включає наступні Docker сервіси:
 - Frontend (React/Vite)
 - Auth Service (Python/FastAPI)
 - Course Service (Python/FastAPI)
 - Learning Service (Python/FastAPI)
+- Payment Service (Python/FastAPI)
 - PostgreSQL Database
 - Redis Cache
 
-## 🔍 Troubleshooting
+## 📚 API документація
 
-### Common Issues
-
-1. **Port conflicts**: If ports are in use, the application will automatically try alternative ports
-2. **Database connection**: Ensure PostgreSQL is running and credentials are correct
-3. **CORS issues**: Check that API URLs in `.env` match your setup
-
-### Logs
-
-- Frontend logs: Check browser console
-- Backend logs: Check terminal output or Docker logs
-- Database logs: Check PostgreSQL logs
-
-## 📚 API Documentation
-
-API documentation is available at:
+Документація API доступна за адресами:
 - Auth Service: http://localhost:8001/docs
 - Course Service: http://localhost:8002/docs
 - Learning Service: http://localhost:8003/docs
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 📞 Support
-
-For support and questions:
-- Create an issue in the repository
-- Check the documentation
-- Review existing issues for solutions
+- Payment Service: http://localhost:8004/docs
