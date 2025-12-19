@@ -210,7 +210,7 @@ async def login(
     session: AsyncSession = Depends(get_session)
 ):
     """Login and get access token"""
-    normalized_email = credentials.username.lower().strip()
+    normalized_email = form_data.username.lower().strip()
 
     # Find user by email (OAuth2PasswordRequestForm uses username field for email)
     result = await session.execute(
