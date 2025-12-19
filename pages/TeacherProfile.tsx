@@ -7,7 +7,7 @@ import { CourseCard } from '../components/CourseCard';
 import { Button } from '../components/Button';
 import { MessageModal } from '../components/MessageModal';
 import { Mail, Phone, Calendar, MessageSquare, User as UserIcon } from 'lucide-react';
-import { getAssetUrl } from '../utils/assetHelpers';
+import { getAssetUrl, getAuthAssetUrl } from '../utils/assetHelpers';
 import { useAuth } from '../context/AuthContext';
 
 type PublicTeacher = UserResponse;
@@ -75,7 +75,7 @@ export const TeacherProfile: React.FC = () => {
     return date.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
   }, [teacher?.created_at]);
 
-  const avatarUrl = teacher?.avatar_url || teacher?.avatar;
+  const avatarUrl = getAuthAssetUrl(teacher?.avatar_url || teacher?.avatar);
   const initials = useMemo(() => getInitials(`${teacher?.first_name ?? ''} ${teacher?.last_name ?? ''}`), [teacher]);
 
   const handleMessage = () => {

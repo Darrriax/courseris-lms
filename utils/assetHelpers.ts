@@ -3,6 +3,7 @@
  */
 
 const COURSE_SERVICE_URL = import.meta.env.VITE_COURSE_SERVICE_URL || 'http://localhost:8002';
+const AUTH_SERVICE_URL = import.meta.env.VITE_AUTH_SERVICE_URL || 'http://localhost:8001';
 
 /**
  * Converts a relative asset path to a full URL
@@ -26,6 +27,30 @@ export function getAssetUrl(assetPath: string | undefined | null): string {
 
   // Otherwise, assume it's already a full path relative to course service
   return `${COURSE_SERVICE_URL}/${assetPath}`;
+}
+
+/**
+ * Converts a relative auth asset path (avatars, banners) to a full URL
+ * @param assetPath - Relative path (e.g., '/static/avatar_xxx.jpg') or full URL
+ * @returns Full URL for the asset
+ */
+export function getAuthAssetUrl(assetPath: string | undefined | null): string {
+  if (!assetPath) {
+    return '';
+  }
+
+  // If it's already a full URL (http/https) or blob URL, return as is
+  if (assetPath.startsWith('http://') || assetPath.startsWith('https://') || assetPath.startsWith('blob:')) {
+    return assetPath;
+  }
+
+  // If it's a relative path, prepend the auth service URL
+  if (assetPath.startsWith('/')) {
+    return `${AUTH_SERVICE_URL}${assetPath}`;
+  }
+
+  // Otherwise, assume it's already a full path relative to auth service
+  return `${AUTH_SERVICE_URL}/${assetPath}`;
 }
 
 /**

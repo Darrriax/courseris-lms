@@ -2,6 +2,8 @@ export interface User {
   id: string;
   name: string;
   avatar: string;
+  avatar_url?: string;
+  banner_url?: string;
   email: string;
   role: 'student' | 'teacher' | 'manager';
   gender?: 'MALE' | 'FEMALE';

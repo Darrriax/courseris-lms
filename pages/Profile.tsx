@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { authService, UserResponse, UserUpdateData } from '../api/auth';
 import { Button } from '../components/Button';
 import { COUNTRIES } from '../constants/countries';
+import { getAuthAssetUrl } from '../utils/assetHelpers';
 
 export const Profile: React.FC = () => {
   const { refreshProfile } = useAuth();
@@ -185,8 +186,8 @@ export const Profile: React.FC = () => {
     );
   }
 
-  const avatarUrl = user.avatar_url || user.avatar || `https://picsum.photos/seed/${user.email}/200/200`;
-  const bannerUrl = user.banner_url;
+  const avatarUrl = getAuthAssetUrl(user.avatar_url || user.avatar) || `https://picsum.photos/seed/${user.email}/200/200`;
+  const bannerUrl = getAuthAssetUrl(user.banner_url);
   const fullName = user.middle_name 
     ? `${user.first_name} ${user.middle_name} ${user.last_name}`
     : `${user.first_name} ${user.last_name}`;

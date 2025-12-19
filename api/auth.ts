@@ -47,6 +47,7 @@ export interface UserUpdateData {
   phone_number?: string;
   country?: string;
   bio?: string;
+  gender?: 'MALE' | 'FEMALE';
 }
 
 export const authService = {
